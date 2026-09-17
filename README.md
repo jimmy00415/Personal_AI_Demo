@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CareMate HK · 康伴
 
-## Getting Started
+Frontend-only product-design prototype. It is **not** connected to a healthcare organisation and does not provide live clinical support. Information stays on this device.
 
-First, run the development server:
+**Your health, understood over time. / 持續理解你的個人健康。**
+
+## Start
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**Recording / acceptance (production):**
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build
+npm start
+npm run test
+```
 
-## Learn More
+Do not record from the development server.
 
-To learn more about Next.js, take a look at the following resources:
+## Routes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Route | Screen |
+| --- | --- |
+| `/` | Today — one next action from the scenario clock |
+| `/ask` | Dizziness check-in (urgent → onset → change → medication gap → summary) |
+| `/health` | Overview / 健康紀錄 / 血壓與量度 / 報告 |
+| `/care` | 跟進 |
+| `/brief` | Consultation brief, clipboard, print, follow-up |
+| `/book` | Reschedule using saved records and an imported clinic calendar |
+| `/report` | Blood test (exactly 3 results) |
+| `/print` | Printable brief |
+| `/family` | Mother’s shared appointment and BP only |
+| `/memory` | What CareMate understands — can stop personalisation |
+| `/about` | Product scope |
+| `/settings` | Language, larger text |
+| `/dev` | Recording controller (Ctrl+Shift+D) |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`/visit` → `/brief`. `/journey` → `/health`. `/plan` → `/care`.
 
-## Deploy on Vercel
+## Model
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Clock: `2026-09-16T08:45+08:00` in `src/lib/types.ts` (`OPENING_CLOCK`)
+- Fixtures: `src/lib/seed.ts`
+- Transitions: `src/lib/store.ts` (namespaced `localStorage` key `caremate-v3`)
+- Copy: `src/lib/i18n.ts`
+- Tokens: `src/app/globals.css`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+A missing medication **record** is UNKNOWN, not missed. A saved brief is not a sent message. An in-app booking is not a clinic confirmation. An emergency state does not become routine follow-up.
+
+## Recording
+
+See `RECORDING_SCRIPT.md` and `INTERACTION_INVENTORY.md`.
+
+## Limitations
+
+No diagnosis, prescribing, 999 call, live clinic booking, clinician messaging, 醫健通 / HA Go / Apple Health connection, push notifications, or background monitoring. Appointment changes and calendar export stay on this device. Health copy is for design evaluation and needs professional review before any other use.
