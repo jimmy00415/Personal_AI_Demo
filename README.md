@@ -23,6 +23,26 @@ npm run test
 
 Do not record from the development server.
 
+## GitHub Pages
+
+This demo can be hosted on GitHub Pages (`*.github.io`) because every route is a static client screen.
+
+Live URL after the first successful Actions deploy:
+
+https://jimmy00415.github.io/Personal_AI_Demo/
+
+Pushing `master` runs `.github/workflows/github-pages.yml`. In the repo, set **Settings → Pages → Source** to **GitHub Actions**.
+
+Local static export (same as Pages):
+
+```bash
+set GITHUB_PAGES=true
+npm run build
+npx --yes serve out
+```
+
+Recording should still use `npm run build` / `npm start` without `GITHUB_PAGES`, so the app stays at `http://localhost:3000`.
+
 ## Routes
 
 | Route | Screen |
