@@ -22,7 +22,7 @@ import type {
   PersonId,
   SceneId,
 } from "./types";
-import { messages, type MessageKey } from "./i18n";
+import { messages, translate, type MessageKey } from "./i18n";
 import { classifyFreeText } from "./ask-llm";
 import { symptomLine } from "./selectors";
 import { NEXT_CLOCK, OPENING_CLOCK, STORAGE_KEY } from "./types";
@@ -95,6 +95,7 @@ interface Actions {
   consumePendingPath: () => void;
   showToast: (message: string) => void;
   resetWorld: () => void;
+  clearDeviceData: () => void;
   applyScene: (id: SceneId) => void;
   advanceClock: () => void;
   openAsk: () => void;
@@ -165,6 +166,36 @@ function savePersisted(s: AppState) {
   if (typeof window === "undefined") return;
   const { toast, pendingPath, hydrated, ...rest } = s;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
+}
+
+const SESSION_KEY = "caremate-session";
+
+/** True on the first load in this tab; reloads within the same tab return false. */
+function beginSession(): boolean {
+  try {
+    if (window.sessionStorage.getItem(SESSION_KEY)) return false;
+    window.sessionStorage.setItem(SESSION_KEY, "1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * An emergency notice belongs to the session that raised it. Someone opening
+ * the app later is asked the urgent question again rather than shown an old
+ * alarm as if it were happening now. Nothing else in the saved world changes.
+ */
+function leaveStaleEmergency(state: AppState): AppState {
+  if (state.phase !== "urgent_help") return state;
+  const fresh = world(state.clock);
+  return {
+    ...state,
+    step: fresh.step,
+    phase: fresh.phase,
+    answers: { ...state.answers, urgent: null },
+    messages: fresh.messages,
+  };
 }
 
 function world(clock = OPENING_CLOCK): AppState {
@@ -354,8 +385,11 @@ export const useAppStore = create<AppState & Actions>((set, get) => ({
     const saved = loadPersisted();
     const locale = window.localStorage.getItem("caremate-locale") === "en" ? "en" : saved?.locale ?? "zh-HK";
     const liteMode = window.localStorage.getItem("caremate-lite") === "1" || saved?.liteMode === true;
+    const firstLoadInThisTab = beginSession();
     if (saved && typeof saved.clock === "string" && saved.step) {
-      set({ ...world(), ...saved, locale, liteMode, toast: null, pendingPath: null, hydrated: true });
+      const restored: AppState = { ...world(), ...saved, locale, liteMode, toast: null, pendingPath: null, hydrated: true };
+      set(firstLoadInThisTab ? leaveStaleEmergency(restored) : restored);
+      if (firstLoadInThisTab) savePersisted(get());
     } else set({ locale, liteMode, hydrated: true });
     document.documentElement.lang = locale === "en" ? "en" : "zh-HK";
     document.documentElement.classList.toggle("lite", liteMode);
@@ -401,6 +435,10 @@ export const useAppStore = create<AppState & Actions>((set, get) => ({
     const next = world();
     set({ ...next, locale: get().locale, liteMode: get().liteMode, pendingPath: "/", hydrated: true });
     savePersisted(get());
+  },
+  clearDeviceData: () => {
+    get().resetWorld();
+    get().showToast(translate("settings.cleared", get().locale));
   },
   applyScene: (id) => {
     const locale = get().locale;

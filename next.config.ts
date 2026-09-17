@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
   assetPrefix: isGithubPages ? `/${repo}/` : undefined,
   trailingSlash: isGithubPages,
   images: { unoptimized: true },
+  // The static export has no API route, so the client must never probe for one.
+  env: { NEXT_PUBLIC_STATIC_EXPORT: isGithubPages ? "true" : "false" },
 };
 
 export default nextConfig;

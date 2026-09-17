@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { HeartPulse, Home, Settings, Users, ListTodo } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
+import { samePath, shellLayout } from "@/lib/shell";
 import { cn } from "@/lib/utils";
 import { ToastHost } from "./system";
 
@@ -42,12 +43,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   useEffect(() => {
-    if (pendingPath && pendingPath !== pathname) {
-      router.push(pendingPath);
-      consumePendingPath();
-    } else if (pendingPath) {
-      consumePendingPath();
-    }
+    if (!pendingPath) return;
+    if (!samePath(pendingPath, pathname)) router.push(pendingPath);
+    consumePendingPath();
   }, [pendingPath, pathname, router, consumePendingPath]);
 
   const secondary = [
@@ -58,9 +56,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { href: "/settings", label: t("nav.settings"), testId: "link-settings" },
   ];
 
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
-  const hideChrome = (emergency && pathname === "/ask") || pathname === "/print" || pathname === "/dev";
-  const hideFab = pathname === "/ask" || pathname === "/print" || pathname === "/book" || hideChrome;
+  const { isActive, hideChrome, hideFab, showAskLink, bare } = shellLayout(pathname, emergency);
 
   if (!hydrated) {
     return <div className="min-h-dvh bg-background" />;
@@ -70,7 +66,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-dvh bg-background">
         <ToastHost />
-        <div className={pathname === "/print" ? "" : "mx-auto max-w-2xl px-6 py-10"}>{children}</div>
+        <div className={bare ? "" : "mx-auto max-w-2xl px-6 py-10"}>{children}</div>
       </div>
     );
   }
@@ -98,7 +94,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
-          {pathname === "/ask" ? null : (
+          {!showAskLink ? null : (
             <>
               <div className="my-3 mx-2 h-px bg-line" />
               <Link

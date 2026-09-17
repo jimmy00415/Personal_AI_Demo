@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
 import type { SceneId } from "@/lib/types";
@@ -10,6 +11,8 @@ export function SettingsPage() {
   const { t, locale, liteMode } = useI18n();
   const setLocale = useAppStore((s) => s.setLocale);
   const setLiteMode = useAppStore((s) => s.setLiteMode);
+  const clearDeviceData = useAppStore((s) => s.clearDeviceData);
+  const [confirmClear, setConfirmClear] = useState(false);
   return (
     <div className="mx-auto max-w-[640px]" data-testid="settings-page">
       <h1 className="text-[30px]">{t("settings.title")}</h1>
@@ -26,6 +29,29 @@ export function SettingsPage() {
       <Button data-testid="lite-toggle-settings" className="mt-2" variant={liteMode ? "primary" : "secondary"} onClick={() => setLiteMode(!liteMode)}>
         {liteMode ? t("lite.on") : t("lite.off")}
       </Button>
+      <h2 className="mt-8 text-[13px] text-ink-soft">{t("settings.data")}</h2>
+      <p className="measure mt-2 text-[15px] text-ink-muted">{t("settings.dataBody")}</p>
+      {confirmClear ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            variant="critical"
+            data-testid="clear-device-confirm"
+            onClick={() => {
+              setConfirmClear(false);
+              clearDeviceData();
+            }}
+          >
+            {t("settings.clearConfirm")}
+          </Button>
+          <Button variant="secondary" onClick={() => setConfirmClear(false)}>
+            {t("common.cancel")}
+          </Button>
+        </div>
+      ) : (
+        <Button variant="secondary" className="mt-3" data-testid="clear-device-data" onClick={() => setConfirmClear(true)}>
+          {t("settings.clearData")}
+        </Button>
+      )}
       <div className="mt-10">
         <Link href="/about" className="text-brand">
           {t("nav.about")}

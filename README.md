@@ -42,6 +42,8 @@ The campus endpoint rejects occasional calls. `/api/ask` retries once, and the s
 
 This demo can be hosted on GitHub Pages (`*.github.io`) because every route is a static client screen.
 
+Saved state lives in the browser. To start the story over on the public site, open 設定 → **清除此裝置上的資料**, or press `Ctrl+Shift+D` for the recording controls. An emergency screen raised in one session is not re-shown on a later visit; the urgent question is asked again instead.
+
 Live URL after the first successful Actions deploy:
 
 https://jimmy00415.github.io/Personal_AI_Demo/

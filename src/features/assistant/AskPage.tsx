@@ -11,8 +11,10 @@ import { Button } from "@/components/system";
 import { buildRecordPacket, classifyFreeText, sanitiseReply } from "@/lib/ask-llm";
 import { EmergencyHelp } from "./EmergencyHelp";
 
+/** Only a locally running Next server can hold the HKBU key; a static export never has an API. */
 function canUseLocalLlm() {
   if (typeof window === "undefined") return false;
+  if (process.env.NEXT_PUBLIC_STATIC_EXPORT === "true") return false;
   const host = window.location.hostname;
   return host === "localhost" || host === "127.0.0.1";
 }

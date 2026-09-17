@@ -19,6 +19,9 @@ Patient-facing actions and their real outcomes. Removed affordances are listed a
 | Ask | Model reply guards | A reply is replaced if it reads back the record packet, claims safety, or calls an UNKNOWN dose missed |
 | Ask | 重試 | Appears only after a failed model call; resends the same question without repeating it |
 | Ask / Brief / Book | Symptom wording | Always derived from the answers given, so no view claims the dizziness eased when it worsened |
+| Ask | Emergency across sessions | Survives a reload in the same tab; a later visit re-asks the urgent question instead of re-showing the alarm |
+| Settings | 清除此裝置上的資料 | Two-step; returns to the 16 Sep 8:45 start, keeps language and text size, toast 已清除此裝置上的資料 |
+| Shell | GitHub Pages paths | Routes carry a trailing slash on Pages; chrome, FAB, and Ask-link rules use normalised paths |
 | Ask | 999 / 如何使用電話 | Explains the user must dial; no call is placed |
 | Brief | 查看血液化驗 | `/report` full page |
 | Brief | 加入 / 移除就診問題 | Shared list with report page |
