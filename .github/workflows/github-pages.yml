@@ -24,6 +24,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Drop API routes for static export
+        run: rm -rf src/app/api
       - run: npm run build
         env:
           GITHUB_PAGES: "true"

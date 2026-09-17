@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
 import { formatDateTime, formatShortDate, formatTime } from "@/lib/clock";
-import { briefText, contactScript, michelleBp, bpAverage, michelleAppt } from "@/lib/selectors";
+import { briefText, contactScript, michelleBp, bpAverage, michelleAppt, symptomLine } from "@/lib/selectors";
 import { allergy, michelleMeds, report } from "@/lib/seed";
 import { Button, SourceLabel } from "@/components/system";
 
@@ -92,7 +92,7 @@ export function BriefPage() {
       <section className="mt-8">
         <h2 className="text-[15px] text-ink-soft">{t("brief.s2")}</h2>
         <p className="mt-2">
-          {episodeSaved ? t("ask.f.dizzyV") : locale === "en" ? "Morning note: a bit dizzy." : "上午8:35：今朝有少少頭暈。"}
+          {episodeSaved ? symptomLine(answers, locale) : locale === "en" ? "Morning note: a bit dizzy." : "上午8:35：今朝有少少頭暈。"}
         </p>
         <div className="mt-1">
           <SourceLabel source="user" />
@@ -187,9 +187,9 @@ export function BriefPage() {
 
       <section className="mt-10 rounded-[20px] bg-surface px-5 py-5">
         <h2 className="text-[18px]">{t("brief.script")}</h2>
-        <p className="measure mt-3 leading-relaxed">{t("brief.scriptBody")}</p>
+        <p className="measure mt-3 leading-relaxed">{contactScript(locale, answers)}</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => copy(contactScript(locale))}>
+          <Button variant="secondary" onClick={() => copy(contactScript(locale, answers))}>
             {t("brief.copyScript")}
           </Button>
           <Button variant="plain" onClick={() => setLogOpen((v) => !v)}>

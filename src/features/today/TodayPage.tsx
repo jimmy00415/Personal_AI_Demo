@@ -21,21 +21,34 @@ export function TodayPage() {
   const answerNextMorning = useAppStore((s) => s.answerNextMorning);
   const answers = useAppStore((s) => s.answers);
   const bookingStatus = useAppStore((s) => s.bookingStatus);
+  const phase = useAppStore((s) => s.phase);
   const appointments = useAppStore((s) => s.appointments);
   const setHealthTab = useAppStore((s) => s.setHealthTab);
   const [why, setWhy] = useState(false);
-  const hero = todayHero(clock, episodeSaved, answers.nextMorning, bookingStatus);
+  const hero = todayHero(clock, episodeSaved, answers.nextMorning, bookingStatus, phase);
   const appt = michelleAppt(appointments);
   const todayTasks = tasks.filter((x) => x.personId === "michelle" && (x.date === clock.slice(0, 10) || x.kind === "contact"));
 
   return (
     <div data-testid="today-page" className="mx-auto max-w-[720px]">
       <p className="text-[15px] text-ink-muted">{formatDate(clock, locale)}</p>
-      <h1 className="mt-1 text-[30px] leading-tight tracking-[-0.03em]">{t("today.greeting")}</h1>
+      <h1 className="mt-1 text-[30px] leading-tight">{t("today.greeting")}</h1>
 
       <section data-testid="daily-brief" className="mt-8">
-        <h2 className="text-[24px] leading-snug tracking-[-0.02em]">{t(hero.titleKey)}</h2>
+        <h2 className="text-[24px] leading-snug">{t(hero.titleKey)}</h2>
         <p className="measure mt-3 text-[17px] leading-relaxed text-ink-muted">{t(hero.bodyKey)}</p>
+
+        {hero.kind === "urgent" ? (
+          <div className="mt-6">
+            <Link
+              href="/ask"
+              data-testid="return-emergency"
+              className="inline-flex min-h-12 items-center rounded-[10px] bg-critical px-4 text-[16px] text-white"
+            >
+              {t("today.urgentCta")}
+            </Link>
+          </div>
+        ) : null}
 
         {hero.kind === "open" ? (
           <div className="mt-6 flex flex-wrap gap-3">

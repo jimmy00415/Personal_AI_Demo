@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
-import { Inter, Noto_Sans_TC } from "next/font/google";
+import { Inter } from "next/font/google";
+import "@fontsource/noto-sans-tc/chinese-traditional-400.css";
+import "@fontsource/noto-sans-tc/chinese-traditional-500.css";
+import "@fontsource/noto-sans-tc/latin-400.css";
+import "@fontsource/noto-sans-tc/latin-500.css";
 import "./globals.css";
 import { AppShell } from "@/components/AppShell";
 
@@ -7,13 +11,7 @@ const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
   display: "swap",
-});
-
-const noto = Noto_Sans_TC({
-  variable: "--font-noto",
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-  preload: true,
+  adjustFontFallback: false,
 });
 
 export const metadata: Metadata = {
@@ -23,10 +21,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="zh-HK"
-      className={`${inter.variable} ${noto.variable} h-full antialiased`}
-    >
+    <html lang="zh-HK" className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-full font-sans">
         <AppShell>{children}</AppShell>
       </body>

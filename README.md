@@ -23,6 +23,21 @@ npm run test
 
 Do not record from the development server.
 
+## Local HKBU chat (optional)
+
+GitHub Pages cannot hold the API key. For the simplest live demo, run the Next server on this machine:
+
+```powershell
+$env:HKBU_GENAI_API_KEY = [Environment]::GetEnvironmentVariable("HKBU_GENAI_API_KEY","User")
+npm run dev
+```
+
+Then open http://localhost:3000/ask and type in the box. The key stays in the server environment; the browser only calls `/api/ask`.
+
+You can also put the key in `.env.local` (gitignored) and just run `npm run dev`.
+
+The campus endpoint rejects occasional calls. `/api/ask` retries once, and the screen shows a **重試** button if the call still fails, so a recording can recover without retyping. Replies pass through `src/lib/ask-llm.ts`, which shortens them to three sentences and replaces any reply that reads the record list back, claims the user is safe, or calls the unconfirmed 14 September dose a missed dose.
+
 ## GitHub Pages
 
 This demo can be hosted on GitHub Pages (`*.github.io`) because every route is a static client screen.

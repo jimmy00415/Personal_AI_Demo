@@ -1,13 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
 import { formatDate, formatTime } from "@/lib/clock";
 import { addMinutes } from "@/lib/clock";
-import { bpAverage } from "@/lib/selectors";
+import { bpAverage, michelleAppt, symptomLine } from "@/lib/selectors";
 import { Button } from "@/components/system";
+import { buildRecordPacket, classifyFreeText, sanitiseReply } from "@/lib/ask-llm";
+import { EmergencyHelp } from "./EmergencyHelp";
+
+function canUseLocalLlm() {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1";
+}
 
 const urgentOpts = [
   { id: "chest-breath", key: "ask.u1" as const, urgent: true },
@@ -44,29 +52,96 @@ export function AskPage() {
   const saveSummary = useAppStore((s) => s.saveSummary);
   const editSummary = useAppStore((s) => s.editSummary);
   const sendFreeText = useAppStore((s) => s.sendFreeText);
+  const addChat = useAppStore((s) => s.addChat);
   const episodeSaved = useAppStore((s) => s.episodeSaved);
+  const questions = useAppStore((s) => s.questions);
+  const appointments = useAppStore((s) => s.appointments);
+  const removeMessage = useAppStore((s) => s.removeMessage);
   const [draft, setDraft] = useState("");
   const [why, setWhy] = useState(false);
-  const [how, setHow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [llm, setLlm] = useState<"unknown" | "on" | "off">(() => (canUseLocalLlm() ? "unknown" : "off"));
+  const [failed, setFailed] = useState<{ text: string; messageId: string } | null>(null);
   const avg = bpAverage();
 
+  useEffect(() => {
+    if (!canUseLocalLlm()) return;
+    let cancelled = false;
+    fetch("/api/ask")
+      .then((r) => r.json())
+      .then((data: { ok?: boolean }) => {
+        if (!cancelled) setLlm(data.ok ? "on" : "off");
+      })
+      .catch(() => {
+        if (!cancelled) setLlm("off");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const unknownDose = answers.medGap === "forgot" || answers.medGap === null;
+
+  function recordPacket() {
+    return buildRecordPacket({
+      clock,
+      answers,
+      bpAverage: avg,
+      appointmentAt: michelleAppt(appointments).at,
+      questions: questions.filter((q) => q.added).map((q) => q.text.zh),
+    });
+  }
+
+  /** Sends an already-visible question to the local model. Never adds the user's message itself. */
+  async function askModel(text: string) {
+    setBusy(true);
+    const packet = recordPacket();
+    try {
+      const history = messages.slice(-8).map((m) => ({
+        role: m.role,
+        content: locale === "en" ? m.text.en : m.text.zh,
+      }));
+      const res = await fetch("/api/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input: text, locale, history, packet, unknownDose }),
+      });
+      if (!res.ok) throw new Error("upstream");
+      const data = (await res.json()) as { text?: string };
+      const clean = sanitiseReply(data.text ?? "", { packet, locale, unknownDose });
+      const messageId = addChat("assistant", { zh: clean.text, en: clean.text });
+      setFailed(clean.adjusted === "empty" ? { text, messageId } : null);
+    } catch {
+      const messageId = addChat("assistant", { zh: t("ask.llmFail"), en: t("ask.llmFail") });
+      setFailed({ text, messageId });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleFreeText(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || busy) return;
+    const kind = classifyFreeText(trimmed, { episodeSaved });
+    if (kind !== "question" || !canUseLocalLlm() || llm !== "on") {
+      sendFreeText(trimmed);
+      return;
+    }
+    setFailed(null);
+    addChat("user", { zh: trimmed, en: trimmed });
+    await askModel(trimmed);
+  }
+
+  async function retryFreeText() {
+    if (!failed || busy) return;
+    const { text, messageId } = failed;
+    removeMessage(messageId);
+    setFailed(null);
+    await askModel(text);
+  }
+
   if (step === "urgent_help") {
-    return (
-      <div className="mx-auto max-w-xl py-6" data-testid="chat-page">
-        <section data-testid="emergency-state" className="min-h-[70vh]">
-          <h1 className="text-[32px] leading-tight text-critical">{t("em.title")}</h1>
-          <p className="measure mt-6 text-[20px] leading-relaxed">{t("em.body")}</p>
-          <p className="mt-8 text-[48px] font-medium tracking-tight text-critical" data-testid="call-999">
-            {t("em.call")}
-          </p>
-          <p className="mt-2 text-[15px] text-ink-muted">{t("em.noCall")}</p>
-          <button type="button" className="mt-8 text-[15px] text-brand" onClick={() => setHow((v) => !v)}>
-            {t("em.how")}
-          </button>
-          {how ? <p className="measure mt-3 text-ink-muted">{t("em.howBody")}</p> : null}
-        </section>
-      </div>
-    );
+    return <EmergencyHelp />;
   }
 
   const options =
@@ -81,13 +156,24 @@ export function AskPage() {
       </header>
 
       <div className="space-y-5">
-        {messages.map((msg) => (
-          <div key={msg.id} className={msg.role === "user" ? "flex justify-end" : ""}>
-            <p className={msg.role === "user" ? "max-w-[84%] rounded-[18px] bg-brand px-4 py-3 text-white" : "measure leading-relaxed"}>
-              {locale === "en" ? msg.text.en : msg.text.zh}
-            </p>
-          </div>
-        ))}
+        <div className="space-y-5" data-testid="chat-log">
+          {messages.map((msg) => (
+            <div key={msg.id} className={msg.role === "user" ? "flex justify-end" : ""}>
+              <p
+                data-testid={msg.note ? "chat-correction" : undefined}
+                className={
+                  msg.role === "user"
+                    ? "max-w-[84%] rounded-[18px] bg-brand px-4 py-3 text-white"
+                    : msg.note
+                      ? "measure text-[14px] text-ink-soft"
+                      : "measure leading-relaxed"
+                }
+              >
+                {locale === "en" ? msg.text.en : msg.text.zh}
+              </p>
+            </div>
+          ))}
+        </div>
 
         {step === "urgent" ? (
           <div>
@@ -111,7 +197,6 @@ export function AskPage() {
 
         {step === "worsening" ? (
           <div className="space-y-3" data-testid="worsening-branch">
-            <p className="measure">{t("ask.worseLead")}</p>
             <p className="measure">{t("ask.worseAdvice")}</p>
             <p className="text-[14px] text-ink-muted">{t("ask.medQ")}</p>
             <div className="grid gap-2">
@@ -157,7 +242,7 @@ export function AskPage() {
             <p className="mt-3">{answers.change === "worse" ? t("ask.worseAdvice") : t("ask.summaryAdvice")}</p>
             <h2 className="mt-6 text-[18px]">{t("ask.summaryTitle")}</h2>
             <dl className="mt-3 space-y-3 text-[15px]">
-              <Row k={t("ask.f.dizzy")} v={t("ask.f.dizzyV")} />
+              <Row k={t("ask.f.dizzy")} v={symptomLine(answers, locale)} />
               <Row k={t("ask.f.bp")} v="151/94 mmHg · 08:30" />
               <Row k={t("ask.f.avg")} v={`${avg.systolic}/${avg.diastolic} mmHg`} />
               <Row k={t("ask.f.urgent")} v={t("ask.f.urgentV")} />
@@ -170,7 +255,7 @@ export function AskPage() {
                 <Button data-testid="add-to-journey" onClick={saveSummary}>
                   {t("ask.confirm")}
                 </Button>
-                <Button variant="secondary" onClick={editSummary}>
+                <Button variant="secondary" data-testid="edit-summary" onClick={editSummary}>
                   {t("ask.edit")}
                 </Button>
               </div>
@@ -192,19 +277,32 @@ export function AskPage() {
         className="mt-8 flex gap-2 border-t border-line pt-4"
         onSubmit={(e) => {
           e.preventDefault();
-          sendFreeText(draft);
+          const text = draft;
           setDraft("");
+          void handleFreeText(text);
         }}
       >
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={t("ask.placeholder")}
+          placeholder={busy ? t("ask.thinking") : t("ask.placeholder")}
+          disabled={busy}
+          data-testid="ask-input"
           className="min-h-12 flex-1 rounded-[12px] bg-surface-secondary px-3 outline-none"
         />
-        <Button type="submit">{t("ask.send")}</Button>
+        <Button type="submit" data-testid="ask-send" disabled={busy}>
+          {t("ask.send")}
+        </Button>
       </form>
-      <p className="mt-3 text-[13px] text-ink-soft">{t("ask.boundary")}</p>
+      {failed ? (
+        <Button variant="secondary" data-testid="ask-retry" className="mt-3" onClick={() => void retryFreeText()}>
+          {t("ask.retry")}
+        </Button>
+      ) : null}
+      <p className="mt-3 text-[13px] text-ink-soft" data-testid="ask-llm-status">
+        {llm === "on" ? t("ask.llmOn") : canUseLocalLlm() && llm === "off" ? t("ask.llmOff") : t("ask.boundary")}
+      </p>
+      {llm === "on" ? <p className="mt-1 text-[13px] text-ink-soft">{t("ask.boundary")}</p> : null}
     </div>
   );
 }

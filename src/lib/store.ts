@@ -17,10 +17,14 @@ import type {
   JourneyPhase,
   Locale,
   MedicationDose,
+  Localized,
   MemoryItem,
   PersonId,
   SceneId,
 } from "./types";
+import { messages, type MessageKey } from "./i18n";
+import { classifyFreeText } from "./ask-llm";
+import { symptomLine } from "./selectors";
 import { NEXT_CLOCK, OPENING_CLOCK, STORAGE_KEY } from "./types";
 import {
   clinicSlots,
@@ -98,6 +102,8 @@ interface Actions {
   editSummary: () => void;
   saveSummary: () => void;
   sendFreeText: (text: string) => void;
+  addChat: (role: ChatMessage["role"], text: ChatMessage["text"]) => string;
+  removeMessage: (id: string) => void;
   toggleQuestion: (id: string) => void;
   addCustomQuestion: () => void;
   setContact: (status: ContactStatus, note: string) => void;
@@ -117,6 +123,29 @@ interface Actions {
 }
 
 type NextId = "no-dizzy" | "still" | "worse";
+
+const URGENT_IDS = ["chest-breath", "stroke", "collapse"];
+const ONSET_IDS = ["after-waking", "just-now", "yesterday", "other"];
+const CHANGE_IDS = ["better", "same", "worse", "unclear"];
+const MED_IDS = ["taken-unlogged", "not-taken", "forgot"];
+
+const ONSET_QUESTION_ID = "a-onset";
+
+let messageSeq = 0;
+
+/** Transcript ids must stay unique even when a question is asked again after a correction. */
+function chatId(prefix: string) {
+  messageSeq += 1;
+  return `${prefix}-${messageSeq}-${Date.now().toString(36)}`;
+}
+
+function say(key: MessageKey): Localized {
+  return messages[key];
+}
+
+function onsetQuestion(): ChatMessage {
+  return { id: ONSET_QUESTION_ID, role: "assistant", text: say("ask.onsetQ") };
+}
 
 function persistable(s: AppState): AppState {
   return { ...s };
@@ -261,12 +290,13 @@ function bookedWorld(base: AppState, slotId: string): AppState {
 
 function savedWorld(base: AppState): AppState {
   const clock = base.clock;
+  const answers: Answers = { urgent: "none", onset: "after-waking", change: "better", medGap: "taken-unlogged", nextMorning: null };
   return {
     ...base,
     episodeSaved: true,
     step: "saved",
     phase: "summary_saved",
-    answers: { urgent: "none", onset: "after-waking", change: "better", medGap: "taken-unlogged", nextMorning: null },
+    answers,
     doses: base.doses.map((d) =>
       d.id === "dose-ator-14"
         ? { ...d, status: "user_confirmed_taken", occurrenceAt: null, enteredAt: addMinutes(clock, 3) }
@@ -290,7 +320,10 @@ function savedWorld(base: AppState): AppState {
         occurredAt: "2026-09-16T08:35:00+08:00",
         enteredAt: clock,
         title: { zh: "頭暈整理", en: "Dizziness summary" },
-        summary: { zh: "今早起床後開始；你表示目前較剛才減輕。今早血壓151/94。", en: "Started after getting up; you say it is easier than earlier. Morning BP 151/94." },
+        summary: {
+          zh: `${symptomLine(answers, "zh-HK")}。今早血壓151/94。`,
+          en: `${symptomLine(answers, "en")}. Morning BP 151/94.`,
+        },
         provenance: { source: "organised", occurredAt: "2026-09-16T08:35:00+08:00", enteredAt: clock },
       },
       ...base.records.filter((r) => r.id !== "rec-dizzy"),
@@ -404,13 +437,15 @@ export const useAppStore = create<AppState & Actions>((set, get) => ({
   openAsk: () => set({ pendingPath: "/ask" }),
   answer: (id) => {
     const s = get();
+    const said = (): ChatMessage[] => [...s.messages, { id: chatId(`u-${id}`), role: "user", text: labelOf(id) }];
+
     if (s.step === "urgent") {
-      if (["chest-breath", "stroke", "collapse"].includes(id)) {
+      if (URGENT_IDS.includes(id)) {
         set({
           answers: { ...s.answers, urgent: id as Answers["urgent"] },
           step: "urgent_help",
           phase: "urgent_help",
-          messages: [...s.messages, { id: `u-${id}`, role: "user", text: labelOf(id) }],
+          messages: said(),
           pendingPath: "/ask",
         });
         savePersisted(get());
@@ -421,49 +456,42 @@ export const useAppStore = create<AppState & Actions>((set, get) => ({
           answers: { ...s.answers, urgent: "unsure" },
           step: "uncertain",
           phase: "uncertain",
-          messages: [
-            ...s.messages,
-            { id: "u-unsure", role: "user", text: labelOf("unsure") },
-            { id: "a-unsure", role: "assistant", text: { zh: "你不太確定剛才那些情況。康伴不能因此當你沒有緊急問題，也不會標示為安全。", en: "You are not sure about those signs. CareMate will not treat this as an all-clear." } },
-          ],
+          messages: [...said(), { id: chatId("a-unsure"), role: "assistant", text: say("ask.uncertain") }],
         });
         savePersisted(get());
         return;
       }
+      if (id !== "none") return;
       set({
         answers: { ...s.answers, urgent: "none" },
         step: "onset",
         phase: "onset",
-        messages: [
-          ...s.messages,
-          { id: "u-none", role: "user", text: labelOf("none") },
-          { id: "a-onset", role: "assistant", text: { zh: "頭暈大約甚麼時候開始？", en: "About when did the dizziness start?" } },
-        ],
+        messages: [...said(), onsetQuestion()],
       });
       savePersisted(get());
       return;
     }
+
     if (s.step === "onset") {
+      if (!ONSET_IDS.includes(id)) return;
       set({
         answers: { ...s.answers, onset: id as Answers["onset"] },
         step: "change",
         phase: "change",
-        messages: [
-          ...s.messages,
-          { id: `u-${id}`, role: "user", text: labelOf(id) },
-          { id: "a-change", role: "assistant", text: { zh: "現在的感覺有沒有改變？", en: "Has it changed compared with earlier?" } },
-        ],
+        messages: [...said(), { id: chatId("a-change"), role: "assistant", text: say("ask.changeQ") }],
       });
       savePersisted(get());
       return;
     }
+
     if (s.step === "change") {
+      if (!CHANGE_IDS.includes(id)) return;
       if (id === "worse") {
         set({
           answers: { ...s.answers, change: "worse" },
           step: "worsening",
           phase: "worsening",
-          messages: [...s.messages, { id: "u-worse", role: "user", text: labelOf("worse") }],
+          messages: [...said(), { id: chatId("a-worse"), role: "assistant", text: say("ask.worseAck") }],
         });
         savePersisted(get());
         return;
@@ -472,29 +500,26 @@ export const useAppStore = create<AppState & Actions>((set, get) => ({
         answers: { ...s.answers, change: id as Answers["change"] },
         step: "med_gap",
         phase: "med_gap",
-        messages: [
-          ...s.messages,
-          { id: `u-${id}`, role: "user", text: labelOf(id) },
-          { id: "a-med", role: "assistant", text: { zh: "另外，9月14日晚上沒有服藥紀錄。這不代表你沒有服藥，我想確認一下當晚的情況。", en: "There is no medication record for the evening of 14 September. That does not mean you missed the dose. I would like to confirm what happened that evening." } },
-        ],
+        messages: [...said(), { id: chatId("a-med"), role: "assistant", text: say("ask.medQ") }],
       });
       savePersisted(get());
       return;
     }
-    if (s.step === "med_gap" || s.step === "worsening" && ["taken-unlogged", "not-taken", "forgot"].includes(id)) {
+
+    if ((s.step === "med_gap" || s.step === "worsening") && MED_IDS.includes(id)) {
       const med = id as NonNullable<Answers["medGap"]>;
       set({
         answers: { ...s.answers, medGap: med },
         step: "summary",
         phase: "summary_review",
-        messages: [...s.messages, { id: `u-med-${id}`, role: "user", text: labelOf(id) }],
-        doses: get().doses.map((d) =>
+        messages: said(),
+        doses: s.doses.map((d) =>
           d.id === "dose-ator-14"
             ? {
                 ...d,
                 status: med === "taken-unlogged" ? "user_confirmed_taken" : med === "not-taken" ? "user_reported_not_taken" : "unknown",
                 occurrenceAt: null,
-                enteredAt: addMinutes(get().clock, 3),
+                enteredAt: addMinutes(s.clock, 3),
               }
             : d,
         ),
@@ -503,7 +528,15 @@ export const useAppStore = create<AppState & Actions>((set, get) => ({
     }
   },
   editSummary: () => {
-    set({ step: "onset", phase: "onset" });
+    const s = get();
+    const asked = s.messages.findIndex((m) => m.id.startsWith(ONSET_QUESTION_ID));
+    const kept = asked === -1 ? s.messages : s.messages.slice(0, asked);
+    set({
+      step: "onset",
+      phase: "onset",
+      answers: { ...s.answers, onset: null, change: null, medGap: null },
+      messages: [...kept, { id: chatId("a-correct"), role: "assistant", text: say("ask.correction"), note: true }, onsetQuestion()],
+    });
     savePersisted(get());
   },
   saveSummary: () => {
@@ -520,7 +553,10 @@ export const useAppStore = create<AppState & Actions>((set, get) => ({
       occurredAt: "2026-09-16T08:35:00+08:00",
       enteredAt: clock,
       title: { zh: "頭暈整理", en: "Dizziness summary" },
-      summary: { zh: "今早起床後開始；你表示目前較剛才減輕。今早血壓151/94。", en: "Started after getting up; you say it is easier than earlier. Morning BP 151/94." },
+      summary: {
+        zh: `${symptomLine(get().answers, "zh-HK")}。今早血壓151/94。`,
+        en: `${symptomLine(get().answers, "en")}. Morning BP 151/94.`,
+      },
       provenance: { source: "organised" as const, occurredAt: "2026-09-16T08:35:00+08:00", enteredAt: clock },
     };
     set({
@@ -553,30 +589,35 @@ export const useAppStore = create<AppState & Actions>((set, get) => ({
     get().showToast(get().locale === "en" ? "Saved to your health records" : "已加入健康紀錄");
     savePersisted(get());
   },
+  addChat: (role, text) => {
+    const id = chatId(role);
+    set({ messages: [...get().messages, { id, role, text }] });
+    savePersisted(get());
+    return id;
+  },
+  removeMessage: (id) => {
+    set({ messages: get().messages.filter((m) => m.id !== id) });
+    savePersisted(get());
+  },
   sendFreeText: (text) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
-    const booking = get().episodeSaved && /預約|改期|覆診|appointment|book|reschedul/i.test(trimmed);
+    const kind = classifyFreeText(trimmed, { episodeSaved: get().episodeSaved });
+    if (kind === "empty") return;
+    const reply: Localized =
+      kind === "booking"
+        ? say("ask.freeBooking")
+        : kind === "unclear"
+          ? say("ask.unclear")
+          : say("ask.freeNoAnswer");
     set({
       messages: [
         ...get().messages,
-        { id: `u-free-${Date.now()}`, role: "user", text: { zh: trimmed, en: trimmed } },
-        {
-          id: `a-free-${Date.now()}`,
-          role: "assistant",
-          text: booking
-            ? {
-                zh: "我可以根據你已有的紀錄，查找家庭醫生診所可改期的時段。此版本在此裝置完成改期，未連接到真實醫院系統。",
-                en: "I can use your saved records to look up earlier slots at the family-doctor clinic. In this version the change stays on this device and is not sent to a real hospital system.",
-              }
-            : {
-                zh: "我未能根據目前資料回答這個問題。你可以先整理症狀、查看已有報告，或把問題加入就診摘要。",
-                en: "I cannot answer that from the information available here. You can organise symptoms, review a saved report, or add the question to the consultation brief.",
-              },
-        },
+        { id: chatId("u-free"), role: "user", text: { zh: trimmed, en: trimmed } },
+        { id: chatId("a-free"), role: "assistant", text: reply },
       ],
     });
-    if (booking) set({ pendingPath: "/book" });
+    if (kind === "booking") set({ pendingPath: "/book" });
+    savePersisted(get());
   },
   toggleQuestion: (id) => {
     set({

@@ -6,7 +6,7 @@ import { clinicSlots, michelleMeds, report } from "@/lib/seed";
 import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
 import { formatDateTime, formatIcsUtc, formatShortDate, formatTime } from "@/lib/clock";
-import { bpAverage, contactScript, michelleAppt, michelleBp } from "@/lib/selectors";
+import { bpAverage, contactScript, michelleAppt, michelleBp, symptomLine } from "@/lib/selectors";
 import { Button, SourceLabel } from "@/components/system";
 
 export function BookPage() {
@@ -21,29 +21,25 @@ export function BookPage() {
   const selectSlot = useAppStore((s) => s.selectSlot);
   const bookSlot = useAppStore((s) => s.bookSlot);
   const clock = useAppStore((s) => s.clock);
-  const [phase, setPhase] = useState<"check" | "search" | "ready">(bookingStatus === "none" ? "check" : "ready");
   const avg = bpAverage();
   const appt = michelleAppt(appointments);
   const slot = clinicSlots.find((s) => s.id === selectedSlotId) ?? clinicSlots[0];
   const booked = bookingStatus === "booked" || bookingStatus === "kept";
+  const [phase, setPhase] = useState<"check" | "search" | "ready">(() =>
+    bookingStatus !== "none" || window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "ready" : "check",
+  );
 
   useEffect(() => {
-    if (booked) {
-      setPhase("ready");
-      return;
-    }
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) {
-      setPhase("ready");
-      return;
-    }
+    if (phase === "ready") return;
     const a = window.setTimeout(() => setPhase("search"), 280);
     const b = window.setTimeout(() => setPhase("ready"), 720);
     return () => {
       window.clearTimeout(a);
       window.clearTimeout(b);
     };
-  }, [booked]);
+    // Runs once for the opening lookup; later phases are driven by these timers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (viewing === "lai-wah") {
     return (
@@ -111,7 +107,7 @@ export function BookPage() {
         <h2 className="text-[15px] text-ink-soft">{t("book.packet")}</h2>
         <p className="mt-2 text-[18px]">{t("book.identity")}</p>
         <dl className="mt-4 space-y-3 text-[15px]">
-          <Row k={t("ask.f.dizzy")} v={answers.onset ? t("ask.f.dizzyV") : locale === "en" ? "Morning note: a bit dizzy." : "今朝有少少頭暈。"} />
+          <Row k={t("ask.f.dizzy")} v={answers.onset ? symptomLine(answers, locale) : locale === "en" ? "Morning note: a bit dizzy." : "今朝有少少頭暈。"} />
           <Row k={t("ask.f.bp")} v={`151/94 mmHg · ${formatTime(michelleBp().at(-1)!.occurredAt, locale)}`} />
           <Row k={t("ask.f.avg")} v={`${avg.systolic}/${avg.diastolic} mmHg`} />
           <Row
@@ -160,7 +156,7 @@ export function BookPage() {
 
       <section className="mt-8 rounded-[20px] bg-surface px-5 py-5">
         <h2 className="text-[18px]">{t("book.reason")}</h2>
-        <p className="measure mt-3 leading-relaxed">{contactScript(locale)}</p>
+          <p className="measure mt-3 leading-relaxed">{contactScript(locale, answers)}</p>
       </section>
 
       {booked ? (

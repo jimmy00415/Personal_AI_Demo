@@ -42,7 +42,8 @@
   --color-critical: var(--critical);
   --color-critical-soft: var(--critical-soft);
   --color-success: var(--success);
-  --font-sans: var(--font-noto), var(--font-inter), "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", ui-sans-serif, system-ui, sans-serif;
+  --font-cjk: "Noto Sans TC", "PingFang TC", "Hiragino Sans CNS", "Microsoft JhengHei", "Source Han Sans TC";
+  --font-sans: var(--font-cjk), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 html {
@@ -57,6 +58,13 @@ body {
   font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.55;
+}
+
+html[lang="zh-HK"] body,
+html[lang="zh-HK"] h1,
+html[lang="zh-HK"] h2,
+html[lang="zh-HK"] [data-testid="call-999"] {
+  letter-spacing: 0;
 }
 
 html.lite {

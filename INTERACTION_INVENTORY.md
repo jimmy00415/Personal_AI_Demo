@@ -12,9 +12,13 @@ Patient-facing actions and their real outcomes. Removed affordances are listed a
 | Ask | Onset / change | Stored and editable until save |
 | Ask | 14 Sep medication options | UNKNOWN stays unknown; taken-unlogged is user-confirmed; not-taken is user report. Never “missed” by inference |
 | Ask | 確認並儲存 | Creates episode `ep-dizzy-16` once; toast 已加入健康紀錄 |
-| Ask | 更正內容 | Returns to onset |
+| Ask | 更正內容 | Drops the superseded answers, shows a correction note, and asks onset once |
 | Ask | 準備就診摘要 | `/brief` |
-| Ask | Free text | Scoped refusal; no invented medical answer |
+| Ask | Free text | On localhost with `HKBU_GENAI_API_KEY`, `/api/ask` talks to HKBU gpt-4.1. On GitHub Pages, scoped refusal only |
+| Ask | Stray keystrokes | Answered locally with a clarifying line; no model call |
+| Ask | Model reply guards | A reply is replaced if it reads back the record packet, claims safety, or calls an UNKNOWN dose missed |
+| Ask | 重試 | Appears only after a failed model call; resends the same question without repeating it |
+| Ask / Brief / Book | Symptom wording | Always derived from the answers given, so no view claims the dizziness eased when it worsened |
 | Ask | 999 / 如何使用電話 | Explains the user must dial; no call is placed |
 | Brief | 查看血液化驗 | `/report` full page |
 | Brief | 加入 / 移除就診問題 | Shared list with report page |

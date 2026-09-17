@@ -189,6 +189,8 @@ export interface ChatMessage {
   role: "user" | "assistant";
   text: Localized;
   step?: ChatStep;
+  /** Marks a system note such as a correction, rendered differently from a spoken reply. */
+  note?: boolean;
 }
 
 export interface QuickReply {
