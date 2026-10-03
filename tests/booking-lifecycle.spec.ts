@@ -152,3 +152,45 @@ test("english_booking_review_is_usable_at_320px_with_reduced_motion", async ({ p
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByTestId("book-confirm").click(); await expect(page.getByTestId("book-receipt")).toContainText("Local itinerary updated");
 });
+
+test("keeping_same_slot_preserves_confirmed_packet_source_revision", () => {
+  const demo = createScenario("routine-day");
+  demo.briefs.push({ id: "confirmed-original", patientId: "may", appointmentId: "appt-gp", appointmentRevision: 1, recipientId: "may", grantRevision: null, status: "confirmed", revision: 1, generatedAt: demo.clock, confirmedAt: demo.clock, sections: [], questions: [], sourceRecordIds: ["appt-gp"], sourceRevisions: { "appt-gp": 1 }, includeMood: false });
+  const result = setAppointment(demo, "appt-gp", "slot-22-1430"); if (!result.ok) throw Error(result.code);
+  expect(result.value.appointments[0]).toMatchObject({ bookingStatus: "kept", revision: 1 });
+  expect(result.value.briefs).toEqual(demo.briefs);
+  expect(result.value.briefs[0].appointmentRevision).toBe(result.value.appointments[0].revision);
+  expect(result.value.tasks).toEqual(demo.tasks);
+  expect(setAppointment(result.value, "appt-gp", "slot-22-1430")).toEqual({ ok: true, value: result.value });
+  expect(isDemoState(result.value)).toBe(true);
+});
+
+test("accompany_task_cannot_be_created_or_rescheduled_for_a_past_appointment", () => {
+  const demo = createScenario("caregiver-alert");
+  demo.grants[0] = { ...demo.grants[0], level: "summary", categories: ["appointments"] };
+  const first = createAccompanyTask(demo, "appt-gp"); if (!first.ok) throw Error(first.code);
+  const history = first.value.tasks.find(t => t.id === "task-accompany-appt-gp")!;
+  demo.clock = "2026-09-23T00:01:00+08:00";
+  expect(createAccompanyTask(demo, "appt-gp")).toEqual({ ok: false, code: "past-time" });
+  const retained = { ...first.value, clock: demo.clock, tasks: first.value.tasks.map(t => t.id === history.id ? { ...t, status: "completed" as const, contactNote: "my earlier accompaniment" } : t) };
+  const before = structuredClone(retained);
+  expect(createAccompanyTask(retained, "appt-gp")).toEqual({ ok: false, code: "past-time" });
+  expect(retained).toEqual(before);
+  const invalid = { ...demo, appointments: demo.appointments.map(a => ({ ...a, scheduledAt: "2026-09-24T10:00:00" })) };
+  expect(createAccompanyTask(invalid, "appt-gp")).toEqual({ ok: false, code: "invalid-time" });
+});
+
+test("selected_patient_questions_are_retained_in_actual_booking_flow", async ({ page }) => {
+  await start(page, createScenario("next-morning"));
+  await page.goto("/report");
+  await page.getByTestId("add-q-q-hba1c-follow").click();
+  const selected = (await snapshot(page)).questions.find(q => q.id === "q-hba1c-follow")!;
+  expect(selected.selected).toBe(true);
+  await page.goto("/brief");
+  await page.getByTestId("open-booking").click();
+  await expect(page.getByTestId("book-packet")).toContainText(selected.text.zh);
+  const unselected = (await snapshot(page)).questions.find(q => !q.selected)!;
+  await expect(page.getByTestId("book-packet")).not.toContainText(unselected.text.zh);
+  await page.getByTestId("book-review-open").click(); await page.getByTestId("book-confirm").click();
+  await page.reload(); await expect(page.getByTestId("book-packet")).toContainText(selected.text.zh);
+});

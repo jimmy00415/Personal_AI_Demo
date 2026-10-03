@@ -51,6 +51,7 @@ export function BookPage() {
       {average ? <p className="mt-2">{t("ask.f.avg")}: {average.systolic}/{average.diastolic} mmHg</p> : null}
       <p className="mt-2">{michelleMeds.map(m => `${m.name} ${L(m.dose)}`).join(" · ")} · Penicillin · {t("source.user")}</p>
       {demo.reports.filter(r => r.patientId === "may").map(r => <p className="mt-2" key={r.id}>{r.results.map(x => `${L(x.name)} ${x.value} ${x.unit}`).join(" · ")}</p>)}
+      {demo.questions.some(q => q.patientId === demo.context.patientId && q.selected) ? <div className="mt-4"><h3>{t("brief.s6")}</h3><ul className="mt-2 space-y-2">{demo.questions.filter(q => q.patientId === demo.context.patientId && q.selected).map(q => <li key={q.id}>{L(q.text)}</li>)}</ul></div> : null}
     </section>
     {error ? <p role="alert" className="mt-6">{t("book.error")}</p> : null}
     {stage === "cancel" ? <section className="mt-6" data-testid="book-cancel-review"><h2 className="text-[24px]">{t("book.cancelReview")}</h2><p className="mt-3">{t("book.receiptBody")}</p><div className="mt-5 flex flex-wrap gap-3"><Button variant="secondary" data-testid="book-cancel-back" onClick={() => setStage("choose")}>{t("book.return")}</Button><Button data-testid="book-cancel-confirm" onClick={() => { const r = state.cancelAppointment(appointment.id); setError(!r.ok); if (r.ok) { setStage("choose"); setChanging(false); } }}>{t("book.cancel")}</Button></div></section>

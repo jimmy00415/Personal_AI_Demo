@@ -25,10 +25,11 @@ export function setAppointment(state: DemoState, appointmentId: string, slotId: 
   if (!slot) return fail("slot-missing");
   if (!validInstant(slot.at) || Date.parse(slot.at) <= Date.parse(state.clock)) return fail("past-slot");
   const bookingStatus = slot.current ? "kept" : "booked";
-  if (appointment.status === "scheduled" && appointment.scheduledAt === slot.at && appointment.bookingStatus === bookingStatus) return success(state);
-  const changed = appointment.scheduledAt !== slot.at || appointment.status !== "scheduled";
+  const changed = appointment.scheduledAt !== slot.at || appointment.status !== "scheduled" || appointment.location.zh !== slot.clinic.zh || appointment.location.en !== slot.clinic.en;
+  if (!changed && appointment.bookingStatus === bookingStatus) return success(state);
   const next = changed ? invalidateAppointmentPreparation(state, appointmentId) : state;
-  return success({ ...next, appointments: next.appointments.map(a => a.id === appointmentId ? { ...a, scheduledAt: slot.at, location: slot.clinic, status: "scheduled", bookingStatus, revision: a.revision + 1 } : a) });
+  // Receipt acknowledgment changes no appointment source fact used by a confirmed brief.
+  return success({ ...next, appointments: next.appointments.map(a => a.id === appointmentId ? { ...a, scheduledAt: slot.at, location: slot.clinic, status: "scheduled", bookingStatus, revision: a.revision + (changed ? 1 : 0) } : a) });
 }
 export function cancelAppointment(state: DemoState, appointmentId: string): ActionResult<DemoState> {
   const appointment = state.appointments.find(a => a.id === appointmentId);
@@ -45,6 +46,7 @@ export function createAccompanyTask(state: DemoState, appointmentId: string): Ac
   const appointment = state.appointments.find(a => a.id === appointmentId && a.patientId === state.context.patientId && a.status === "scheduled");
   const grant = state.grants.find(g => g.patientId === state.context.patientId && g.recipientId === "david" && g.status === "active" && g.level !== "alerts-only" && g.categories.includes("appointments"));
   if (!appointment || !grant) return fail("appointment-unavailable");
+  const time = future(state, appointment.scheduledAt); if (!time.ok) return time;
   const id = `task-accompany-${appointment.id}`;
   const prior = state.tasks.find(t => t.id === id);
   if (prior && prior.ownerId !== "david") return fail("owner-mismatch");
