@@ -106,6 +106,9 @@ export interface Appointment extends PatientEntity {
   /** Temporary receipt state; scheduledAt is the appointment time authority. */
   bookingStatus: BookingStatus;
 }
+export interface CheckInCompletionEvidence {
+  checkInId: string; checkInRevision: number; measurementId: string; episodeId: string | null; priorDisposition: HealthEpisode["disposition"];
+}
 export interface CareTask extends PatientEntity {
   ownerId: ActorId;
   proposedOwnerId: ActorId | null;
@@ -118,7 +121,8 @@ export interface CareTask extends PatientEntity {
   contactNote: string;
   title: Localized;
   revision: number;
-  completionEvidence?: { checkInId: string; checkInRevision: number; measurementId: string; episodeId: string | null; priorDisposition: HealthEpisode["disposition"] };
+  completionEvidence?: CheckInCompletionEvidence;
+  completionHistory?: CheckInCompletionEvidence[];
   supersededByCheckInRevision?: number;
 }
 export interface ConsentGrant extends PatientEntity {

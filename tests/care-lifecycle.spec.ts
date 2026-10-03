@@ -354,3 +354,77 @@ test("nonclinical_correction_keeps_current_contact_without_duplicate_action", ()
   expect(after.tasks.find(t => t.id === "task-morning")?.completionEvidence?.checkInRevision).toBe(2);
   expect(isDemoState(after)).toBe(true);
 });
+
+for (const [initial, correction] of [["worse", "still"], ["worse", "no-dizzy"], ["no-dizzy", "worse"]] as const) test(`historical_correction_after_stable_task_reuse_preserves_current_completion: ${initial} to ${correction}`, () => {
+  useAppStore.getState().applyScenario("next-morning");
+  const confirm = (change: "no-dizzy" | "still" | "worse", measurementId: string) => {
+    const draft = useAppStore.getState().beginTaskCheckIn("task-morning", change); if (!draft.ok) throw Error(draft.code);
+    useAppStore.getState().patchCheckIn(draft.value, { mood: "okay", body: "dizzy", step: "review" });
+    const at = useAppStore.getState().demo.clock;
+    expect(useAppStore.getState().saveObservation({ id: measurementId, patientId: "may", occurredAt: at, enteredAt: at, source: "home-measure", systolic: 145, diastolic: 89, revision: 1 }).ok).toBe(true);
+    expect(useAppStore.getState().saveCheckIn(draft.value).ok).toBe(true);
+    return useAppStore.getState().demo.checkIns.find(c => c.draftId === draft.value)!;
+  };
+  const old = confirm(initial, "bp-sept17");
+  // A snapshot produced before completionHistory existed still retains its own evidence on reuse.
+  const legacy = JSON.parse(JSON.stringify(useAppStore.getState().demo));
+  delete legacy.tasks.find((t: { id: string }) => t.id === "task-morning").completionHistory;
+  useAppStore.setState({ demo: legacy });
+  const oldEvidence = useAppStore.getState().demo.tasks.find(t => t.id === "task-morning")!.completionEvidence!;
+  expect(useAppStore.getState().scheduleFollowup("2026-09-18T09:15:00+08:00").ok).toBe(true);
+  useAppStore.setState({ demo: { ...useAppStore.getState().demo, clock: "2026-09-18T09:15:00+08:00" } });
+  const current = confirm("no-dizzy", "bp-sept18");
+  const before = useAppStore.getState().demo;
+  const currentEvidence = before.tasks.find(t => t.id === "task-morning")!.completionEvidence!;
+  useAppStore.getState().editCheckIn(old.id);
+  useAppStore.getState().patchCheckIn(old.draftId, { followupChange: correction, step: "review" });
+  expect(useAppStore.getState().saveCheckIn(old.draftId).ok).toBe(true);
+  const after = useAppStore.getState().demo;
+  expect(after.tasks.find(t => t.id === "task-morning")!.completionEvidence).toEqual(currentEvidence);
+  expect(after.episodes).toEqual(before.episodes);
+  expect(after.observations).toEqual(before.observations);
+  expect(after.checkIns.find(c => c.id === current.id)).toEqual(current);
+  expect(after.tasks.filter(t => t.id.startsWith("task-next-") && !t.supersededByCheckInRevision && t.status === "pending")).toHaveLength(0);
+  expect(after.tasks.find(t => t.id === "task-morning")!.completionHistory?.find(e => e.checkInId === old.id)).toEqual({ ...oldEvidence, checkInRevision: 2 });
+  expect(after.healthRecords.find(r => r.derivedFromCheckIn?.id === old.id && !r.supersededByRecordId)).toMatchObject({ derivedFromCheckIn: { id: old.id, revision: 2 }, kind: correction === "no-dizzy" ? "note" : "symptom", occurredAt: old.occurredAt });
+  expect(value(completeCheckInTask(after, "task-morning", old.id))).toEqual(after);
+  expect(isDemoState(JSON.parse(JSON.stringify(after)))).toBe(true);
+  for (const [field, invalid] of [["measurementId", "missing-bp"], ["measurementId", "dose-ator-14"], ["episodeId", "missing-episode"], ["checkInId", "bp-sept17"]]) {
+    const corrupt = JSON.parse(JSON.stringify(after));
+    corrupt.tasks.find((t: { id: string }) => t.id === "task-morning").completionHistory[0][field] = invalid;
+    expect(isDemoState(corrupt)).toBe(false);
+  }
+  useAppStore.getState().editCheckIn(current.id);
+  useAppStore.getState().patchCheckIn(current.draftId, { followupChange: "still", step: "review" });
+  useAppStore.getState().saveCheckIn(current.draftId);
+  const correctedCurrent = useAppStore.getState().demo;
+  expect(correctedCurrent.tasks.find(t => t.id === "task-morning")!.completionEvidence).toMatchObject({ checkInId: current.id, checkInRevision: 2, measurementId: "bp-sept18" });
+  expect(correctedCurrent.episodes[0].answers.nextMorning).toBe("still");
+  const active = correctedCurrent.tasks.filter(t => t.id.startsWith("task-next-") && !t.supersededByCheckInRevision && t.status === "pending");
+  expect(active).toHaveLength(1);
+  expect(active[0].sourceRecordIds).toContain("bp-sept18");
+  expect(active[0].sourceRecordIds).not.toContain("bp-sept17");
+  expect(isDemoState(correctedCurrent)).toBe(true);
+});
+
+test("current_correction_without_completion_history_retains_legacy_evidence", () => {
+  useAppStore.getState().applyScenario("next-morning");
+  const draft = useAppStore.getState().beginTaskCheckIn("task-morning", "worse"); if (!draft.ok) throw Error(draft.code);
+  useAppStore.getState().patchCheckIn(draft.value, { mood: "okay", body: "dizzy", step: "review" });
+  const at = useAppStore.getState().demo.clock;
+  useAppStore.getState().saveObservation({ id: "legacy-current-bp", patientId: "may", occurredAt: at, enteredAt: at, source: "home-measure", systolic: 145, diastolic: 89, revision: 1 });
+  useAppStore.getState().saveCheckIn(draft.value);
+  const legacy = JSON.parse(JSON.stringify(useAppStore.getState().demo));
+  const task = legacy.tasks.find((t: { id: string }) => t.id === "task-morning");
+  const evidence = task.completionEvidence;
+  delete task.completionHistory;
+  useAppStore.setState({ demo: legacy });
+  const record = legacy.checkIns[0];
+  useAppStore.getState().editCheckIn(record.id);
+  useAppStore.getState().patchCheckIn(record.draftId, { followupChange: "no-dizzy", step: "review" });
+  useAppStore.getState().saveCheckIn(record.draftId);
+  const corrected = useAppStore.getState().demo;
+  expect(corrected.tasks.find(t => t.id === "task-morning")!.completionEvidence).toEqual({ ...evidence, checkInRevision: 2 });
+  expect(corrected.episodes[0]).toMatchObject({ answers: { nextMorning: "no-dizzy" }, disposition: evidence.priorDisposition });
+  expect(isDemoState(corrected)).toBe(true);
+});
