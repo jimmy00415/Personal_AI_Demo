@@ -21,7 +21,7 @@ function future(s: DemoState, at: string): ActionResult<void> {
   return Date.parse(at) > Date.parse(s.clock) ? { ok: true, value: undefined } : fail("past-time");
 }
 function replaceTask(s: DemoState, task: CareTask) { return { ...s, tasks: s.tasks.map(t => t.id === task.id ? task : t) }; }
-export function followupDraftId(task: CareTask) { return `draft-followup-${task.id}-${task.revision}`; }
+export function followupDraftId(task: CareTask, at?: string) { return `draft-followup-${task.id}-${task.revision}${at ? `-${clockParts(at).dateKey}` : ""}`; }
 
 export function setDoseStatus(state: DemoState, doseId: string, status: DoseCorrection): ActionResult<DemoState> {
   const dose = state.medicationDoses.find(d => d.id === doseId);
@@ -68,37 +68,63 @@ export function recordContactOutcome(state: DemoState, taskId: string, outcome: 
   const task = state.tasks.find(t => t.id === taskId);
   if (!task || task.kind !== "contact") return fail("contact-missing");
   if (!mayEdit(state, task.patientId)) return fail("patient-only");
-  if (task.status === "cancelled") return fail("task-inactive");
+  if (task.status === "cancelled" || task.supersededByCheckInRevision) return fail("task-inactive");
   if (!["not-contacted", "left-message", "contacted"].includes(outcome)) return fail("invalid-outcome");
   const contactOutcome = outcome === "left-message" ? "left_message" : outcome === "not-contacted" ? "not_contacted" : "contacted";
   if (task.contactOutcome === contactOutcome && task.contactNote === note) return success(state);
   return success(replaceTask(state, { ...task, contactOutcome, contactNote: note, status: outcome === "contacted" ? "completed" : "pending", revision: task.revision + 1 }));
 }
+/** Reconcile a confirmed result from its source revision, retaining earlier action/source history. */
 export function completeCheckInTask(state: DemoState, taskId: string, checkInId: string): ActionResult<DemoState> {
   const task = state.tasks.find(t => t.id === taskId);
   if (!task || task.kind !== "check-in") return fail("task-missing");
   if (!mayEdit(state, task.patientId)) return fail("patient-only");
-  if (task.status === "completed" && task.sourceRecordIds.includes(checkInId)) return success(state);
   if (task.status === "cancelled") return fail("task-inactive");
   const checkIn = state.checkIns.find(c => c.id === checkInId && c.patientId === task.patientId);
-  if (!checkIn || checkIn.taskId !== taskId || checkIn.draftId !== followupDraftId(task) || state.drafts.some(d => d.id === checkIn.draftId)) return fail("confirmed-checkin-required");
+  const correctingCompleted = task.status === "completed" && task.sourceRecordIds.includes(checkInId);
+  const currentDraft = checkIn?.draftId === followupDraftId(task, state.clock) || checkIn?.draftId === followupDraftId(task);
+  if (!checkIn || checkIn.taskId !== taskId || (!correctingCompleted && !currentDraft) || state.drafts.some(d => d.id === checkIn.draftId)) return fail("confirmed-checkin-required");
+  if (task.status === "completed" && !correctingCompleted) return fail("confirmed-checkin-required");
   const at = Date.parse(task.scheduledAt ?? state.clock);
-  if (Date.parse(checkIn.occurredAt) < at || Date.parse(checkIn.occurredAt) > Date.parse(state.clock) || clockParts(checkIn.occurredAt).dateKey !== clockParts(state.clock).dateKey) return fail("current-checkin-required");
+  if (Date.parse(checkIn.occurredAt) > Date.parse(state.clock) || !correctingCompleted && (Date.parse(checkIn.occurredAt) < at || clockParts(checkIn.occurredAt).dateKey !== clockParts(state.clock).dateKey)) return fail("current-checkin-required");
   if (!checkIn.followupChange) return fail("followup-change-required");
   if (state.episodes.some(e => e.patientId === task.patientId && e.disposition === "urgent" && e.sourceRecordIds.some(id => task.sourceRecordIds.includes(id)))) return fail("urgent-help-required");
-  const measurement = state.observations.find(o => o.patientId === task.patientId && o.source === "home-measure" && Date.parse(o.occurredAt) >= at && Date.parse(o.occurredAt) <= Date.parse(state.clock) && Date.parse(o.enteredAt) >= Date.parse(checkIn.occurredAt));
+  const evidence = task.completionEvidence;
+  const measurement = correctingCompleted
+    ? state.observations.find(o => o.patientId === task.patientId && o.source === "home-measure" && (evidence ? o.id === evidence.measurementId : task.sourceRecordIds.includes(o.id)))
+    : state.observations.find(o => o.patientId === task.patientId && o.source === "home-measure" && Date.parse(o.occurredAt) >= Date.parse(checkIn.occurredAt) && Date.parse(o.occurredAt) <= Date.parse(state.clock) && Date.parse(o.enteredAt) >= Date.parse(checkIn.occurredAt));
   if (!measurement) return fail("measurement-required");
-  let next = replaceTask(state, { ...task, status: "completed", sourceRecordIds: [...new Set([...task.sourceRecordIds, checkIn.id, measurement.id])], revision: task.revision + 1 });
-  const episode = state.episodes.filter(e => e.patientId === task.patientId && e.sourceRecordIds.some(id => task.sourceRecordIds.includes(id))).at(-1);
-  if (episode) next = { ...next, episodes: next.episodes.map(e => e.id === episode.id ? { ...e, answers: { ...e.answers, nextMorning: checkIn.followupChange! }, phase: "next_logged", disposition: checkIn.followupChange === "worse" ? "worsening" : checkIn.followupChange === "still" ? "uncertain" : e.disposition, sourceRecordIds: [...new Set([...e.sourceRecordIds, checkIn.id, measurement.id])], revision: e.revision + 1 } : e) };
-  if (checkIn.followupChange !== "no-dizzy") {
-    const id = `record-followup-${checkIn.id}`;
-    const worse = checkIn.followupChange === "worse";
-    const record = { id, patientId: task.patientId, category: "body" as const, source: "user" as const, occurredAt: checkIn.occurredAt, enteredAt: state.clock, text: { zh: worse ? "本人記錄：頭暈比之前嚴重。" : "本人記錄：仍然頭暈。", en: worse ? "My report: dizziness is worse than before." : "My report: still feeling dizzy." }, title: { zh: "跟進本人紀錄", en: "My follow-up record" }, kind: "symptom" as const, revision: 1 };
-    const contact: CareTask = { id: `task-next-${checkIn.id}`, patientId: task.patientId, ownerId: "may", proposedOwnerId: null, kind: "contact", status: "pending", scheduledAt: state.clock, sourceRecordIds: [id, checkIn.id, measurement.id], shareCategory: "body", contactOutcome: "not_contacted", contactNote: "", title: { zh: worse ? "頭暈加劇：尋求醫護協助" : "仍然頭暈：聯絡醫護跟進", en: worse ? "Worse dizziness: seek clinical help" : "Still dizzy: contact a clinician" }, revision: 1 };
-    next = { ...next, healthRecords: [...next.healthRecords, record], tasks: [...next.tasks, contact] };
-  }
-  return success(next);
+  if (correctingCompleted && evidence?.checkInId === checkIn.id && evidence.checkInRevision === checkIn.revision) return success(state);
+  const episode = evidence?.episodeId ? state.episodes.find(e => e.id === evidence.episodeId) : state.episodes.filter(e => e.patientId === task.patientId && e.sourceRecordIds.some(id => task.sourceRecordIds.includes(id))).at(-1);
+  // Old snapshots have no evidence metadata. Recover the original disposition from original symptom answers.
+  const priorDisposition = evidence?.priorDisposition ?? (correctingCompleted && episode
+    ? episode.answers.urgent === "unsure" ? "uncertain" : episode.answers.change === "worse" ? "worsening" : episode.saved ? "ordinary" : "open"
+    : episode?.disposition ?? "open");
+  const recordBase = `record-followup-${checkIn.id}`;
+  const recordId = checkIn.revision === 1 ? recordBase : `${recordBase}-r${checkIn.revision}`;
+  const worse = checkIn.followupChange === "worse";
+  const continuing = checkIn.followupChange !== "no-dizzy";
+  const record = { id: recordId, patientId: task.patientId, category: "body" as const, source: "user" as const, occurredAt: checkIn.occurredAt, enteredAt: state.clock, text: { zh: worse ? "本人記錄：頭暈比之前嚴重。" : continuing ? "本人記錄：仍然頭暈。" : "本人記錄：暫時沒有再頭暈。", en: worse ? "My report: dizziness is worse than before." : continuing ? "My report: still feeling dizzy." : "My report: no further dizziness for now." }, title: { zh: "跟進本人紀錄", en: "My follow-up record" }, kind: continuing ? "symptom" as const : "note" as const, revision: 1, derivedFromCheckIn: { id: checkIn.id, revision: checkIn.revision } };
+  const sameComparison = correctingCompleted && state.healthRecords.some(r => task.sourceRecordIds.includes(r.id) && !r.supersededByRecordId && r.derivedFromCheckIn?.id === checkIn.id && r.text.zh === record.text.zh);
+  const obsoleteRecords = state.healthRecords.filter(r => (r.id === recordBase || r.id.startsWith(`${recordBase}-r`)) && r.id !== recordId && !r.supersededByRecordId);
+  const healthRecords = state.healthRecords.map(r => obsoleteRecords.some(old => old.id === r.id) ? { ...r, supersededByRecordId: recordId, revision: r.revision + 1 } : r);
+  if (!healthRecords.some(r => r.id === recordId)) healthRecords.push(record);
+  const contactBase = `task-next-${checkIn.id}`;
+  const contactId = checkIn.revision === 1 ? contactBase : `${contactBase}-r${checkIn.revision}`;
+  const tasks = state.tasks.map(t => {
+    if (t.id === task.id) return { ...t, status: "completed" as const, sourceRecordIds: [...new Set([...t.sourceRecordIds, checkIn.id, measurement.id, recordId])], completionEvidence: { checkInId: checkIn.id, checkInRevision: checkIn.revision, measurementId: measurement.id, episodeId: episode?.id ?? null, priorDisposition }, revision: t.revision + 1 };
+    if ((t.id === contactBase || t.id.startsWith(`${contactBase}-r`)) && t.id !== contactId && !t.supersededByCheckInRevision) {
+      if (sameComparison) return { ...t, sourceRecordIds: [...new Set([...t.sourceRecordIds, recordId])], revision: t.revision + 1 };
+      const responded = t.contactOutcome !== "not_contacted" || !!t.contactNote || t.ownerId !== "may" || t.proposedOwnerId !== null || state.events.some(e => e.taskId === t.id && e.status !== "pending");
+      return { ...t, status: responded || ["completed", "cancelled"].includes(t.status) ? t.status : "cancelled" as const, supersededByCheckInRevision: checkIn.revision, revision: t.revision + 1 };
+    }
+    return t;
+  });
+  if (continuing && !sameComparison && !tasks.some(t => t.id === contactId)) tasks.push({ id: contactId, patientId: task.patientId, ownerId: "may", proposedOwnerId: null, kind: "contact", status: "pending", scheduledAt: state.clock, sourceRecordIds: [recordId, checkIn.id, measurement.id], shareCategory: "body", contactOutcome: "not_contacted", contactNote: "", title: { zh: worse ? "頭暈加劇：尋求醫護協助" : "仍然頭暈：聯絡醫護跟進", en: worse ? "Worse dizziness: seek clinical help" : "Still dizzy: contact a clinician" }, revision: 1 });
+  const episodes = state.episodes.map(e => e.id === episode?.id ? { ...e, answers: { ...e.answers, nextMorning: checkIn.followupChange! }, phase: "next_logged" as const, disposition: worse ? "worsening" as const : continuing ? "uncertain" as const : priorDisposition, sourceRecordIds: [...new Set([...e.sourceRecordIds, checkIn.id, measurement.id, recordId])], revision: e.revision + 1 } : e);
+  const changedSourceIds = new Set([checkIn.id, ...obsoleteRecords.map(r => r.id)]);
+  const briefs = state.briefs.map(b => b.sourceRecordIds.some(id => changedSourceIds.has(id)) && b.status === "confirmed" ? { ...b, status: "draft" as const, confirmedAt: null, revision: b.revision + 1 } : b);
+  return success({ ...state, healthRecords, tasks, episodes, briefs });
 }
 export function createAfterVisitTask(state: DemoState, input: { patientId: PatientId; text: string; scheduledAt: string; proposedOwnerId: ActorId; shareCategory: ShareCategory | "private" }): ActionResult<DemoState> {
   if (!mayEdit(state, input.patientId)) return fail("patient-only");

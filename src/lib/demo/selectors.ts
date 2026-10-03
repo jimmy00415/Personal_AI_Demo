@@ -7,7 +7,7 @@ export function isTaskOverdue(state: DemoState, task: CareTask) {
 export function selectTodayTasks(state: DemoState) {
   if (state.context.actorId !== "may") return [];
   const date = clockParts(state.clock).dateKey;
-  return state.tasks.filter(t => t.patientId === state.context.patientId && t.status !== "cancelled" && (!t.scheduledAt || clockParts(t.scheduledAt).dateKey === date || isTaskOverdue(state, t)));
+  return state.tasks.filter(t => t.patientId === state.context.patientId && !t.supersededByCheckInRevision && t.status !== "cancelled" && (!t.scheduledAt || clockParts(t.scheduledAt).dateKey === date || isTaskOverdue(state, t)));
 }
 
 export function selectObservations(state: DemoState, patientId: PatientId = state.context.patientId) {

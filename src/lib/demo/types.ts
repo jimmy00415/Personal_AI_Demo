@@ -36,6 +36,8 @@ export interface HealthRecord extends PatientEntity {
   revision: number;
   title: Localized;
   kind: "symptom" | "note" | "report" | "measurement" | "medication";
+  derivedFromCheckIn?: { id: string; revision: number };
+  supersededByRecordId?: string;
 }
 export interface HealthEpisode extends PatientEntity {
   answers: Answers;
@@ -116,6 +118,8 @@ export interface CareTask extends PatientEntity {
   contactNote: string;
   title: Localized;
   revision: number;
+  completionEvidence?: { checkInId: string; checkInRevision: number; measurementId: string; episodeId: string | null; priorDisposition: HealthEpisode["disposition"] };
+  supersededByCheckInRevision?: number;
 }
 export interface ConsentGrant extends PatientEntity {
   recipientId: RecipientId; level: SharingLevel; categories: ShareCategory[]; status: "active" | "revoked"; updatedAt: string; revision: number;

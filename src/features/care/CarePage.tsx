@@ -26,7 +26,7 @@ export function CarePage() {
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tasks = demo.context.actorId === "may" ? demo.tasks.filter(x => x.patientId === demo.context.patientId) : [];
-  const activeTasks = tasks.filter(x => x.status !== "cancelled" && x.status !== "completed");
+  const activeTasks = tasks.filter(x => x.status !== "cancelled" && x.status !== "completed" && !x.supersededByCheckInRevision);
   const selected = tasks.find(x => x.id === selectedId);
   const afterTask = tasks.find(x => x.id === createdId);
   if (selected) return <div className="mx-auto max-w-[720px]" data-testid="plan-page"><TaskDetail key={selected.id} task={selected} onBack={() => router.push("/care")} /></div>;
@@ -35,7 +35,7 @@ export function CarePage() {
     <section><p data-testid="care-task-count" className="mb-3">{t("care.count")} · {activeTasks.length}</p><GroupedList>
       {activeTasks.map(task => <ListRow key={task.id} testId={task.id === "task-morning" ? "follow-morning-row" : `care-${task.id}`} title={L(task.title)} meta={task.scheduledAt ? formatDateTime(task.scheduledAt, locale) : undefined} value={t(isTaskOverdue(demo, task) ? "care.overdue" : `care.${task.status}`)} onClick={() => router.push(`/care?task=${encodeURIComponent(task.id)}`)} />)}
     </GroupedList>{!activeTasks.length ? <p>{t("care.empty")}</p> : null}{state.followup === "declined" ? <p className="mt-3">{t("follow.declined")}</p> : null}</section>
-    {tasks.some(x => x.status === "completed" || x.status === "cancelled") ? <section><GroupedList>{tasks.filter(x => x.status === "completed" || x.status === "cancelled").map(task => <ListRow key={task.id} testId={`care-history-${task.id}`} title={L(task.title)} value={t(`care.${task.status}`)} onClick={() => router.push(`/care?task=${encodeURIComponent(task.id)}`)} />)}</GroupedList></section> : null}
+    {tasks.some(x => x.status === "completed" || x.status === "cancelled" || x.supersededByCheckInRevision) ? <section><GroupedList>{tasks.filter(x => x.status === "completed" || x.status === "cancelled" || x.supersededByCheckInRevision).map(task => <ListRow key={task.id} testId={`care-history-${task.id}`} title={L(task.title)} value={t(task.supersededByCheckInRevision ? "care.supersededStatus" : `care.${task.status}`)} onClick={() => router.push(`/care?task=${encodeURIComponent(task.id)}`)} />)}</GroupedList></section> : null}
     {demo.context.actorId === "may" ? <section><h2 className="mb-3 text-[24px]">{t("today.nextAppt")}</h2><GroupedList>{demo.appointments.filter(a => a.patientId === demo.context.patientId && a.status === "scheduled").map(appointment => <ListRow key={appointment.id} testId="follow-appt-row" title={L(appointment.title)} meta={formatDateTime(appointment.scheduledAt, locale)} value={t("follow.scheduled")} onClick={() => router.push(state.episodeSaved ? "/book" : "/brief")} />)}</GroupedList></section> : null}
     {demo.context.actorId === "may" ? <section className="space-y-4">
       <h2 className="text-[24px]">{t("care.afterTitle")}</h2><p className="text-ink-muted">{t("care.afterBoundary")}</p>

@@ -7,7 +7,7 @@ import { Check, Heart, Smile, Meh, Frown, CircleMinus } from "lucide-react";
 import { Button } from "@/components/system";
 import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
-import { clockParts } from "@/lib/clock";
+import { clockParts, formatDateTime } from "@/lib/clock";
 import type { BodyFeeling, Mood } from "@/lib/demo/types";
 import { CheckInReview } from "./CheckInReview";
 import { ObservationForm } from "./ObservationForm";
@@ -16,6 +16,16 @@ const moods: Mood[] = ["good", "okay", "low", "stressed", "skipped"];
 const bodies: BodyFeeling[] = ["well", "tired", "dizzy", "other"];
 const moodIcons = { good: Smile, okay: Meh, low: Frown, stressed: Heart, skipped: CircleMinus };
 const steps = ["mood", "body", "note", "review"] as const;
+
+function CurrentFollowupEntry({ taskId, occurredAt }: { taskId: string; occurredAt: string }) {
+  const { t, locale } = useI18n();
+  const router = useRouter();
+  const demo = useAppStore(s => s.demo);
+  const begin = useAppStore(s => s.beginTaskCheckIn);
+  const task = demo.tasks.find(t => t.id === taskId);
+  if (!task || task.status === "completed" || task.status === "cancelled" || clockParts(occurredAt).dateKey === clockParts(demo.clock).dateKey) return null;
+  return <aside className="space-y-3 rounded-[12px] bg-surface-secondary p-4" data-testid="task-earlier-draft"><p>{t("care.previousDraft")}</p><p>{formatDateTime(occurredAt, locale)}</p><p>{t("care.newEntryTime")} · {formatDateTime(demo.clock, locale)}</p><Button data-testid="task-current-checkin" onClick={() => { const result = begin(taskId); if (result.ok) router.push(`/check-in?draft=${encodeURIComponent(result.value)}`); }}>{t("care.startCurrent")}</Button></aside>;
+}
 
 export function CheckInPage() {
   const router = useRouter();
@@ -44,6 +54,7 @@ export function CheckInPage() {
   if (!draft && saved) return <div className="mx-auto max-w-[640px] space-y-6" data-testid="checkin-receipt" aria-live="polite">
     <h1 className="text-[30px]">{t(persistenceError ? "storage.memoryOnly" : "checkin.receipt")}</h1>
     <CheckInReview record={saved} />
+    {saved.taskId ? <CurrentFollowupEntry taskId={saved.taskId} occurredAt={saved.occurredAt} /> : null}
     {saved.taskId ? <section className="space-y-4" data-testid="followup-checkin-receipt">
       <p>{t("care.followupChange")} · {t(saved.followupChange === "worse" ? "today.worseDizzy" : saved.followupChange === "still" ? "today.stillDizzy" : "today.noDizzy")}</p>
       {demo.tasks.find(task => task.id === saved.taskId)?.status === "completed" ? <p role="status">{t("care.followupDone")}</p> : <><p>{t("care.measurementRequired")}</p><Button variant="secondary" data-testid="followup-measurement" onClick={() => setMeasurementOpen(v => !v)}>{t("observation.add")}</Button>{measurementOpen ? <ObservationForm onCancel={() => setMeasurementOpen(false)} /> : null}<Button data-testid="followup-complete" onClick={() => { const result = complete(saved.taskId!, saved.id); setCompletionError(result.ok ? null : result.code); }}>{t("care.completeCheckIn")}</Button>{completionError ? <p role="alert">{t(completionError === "measurement-required" ? "care.measurement-required" : "care.error")}</p> : null}</>}
@@ -57,6 +68,7 @@ export function CheckInPage() {
   const next = () => patch(draft.id, { step: steps[Math.min(index + 1, 3)] });
   return <div className="mx-auto max-w-[640px] space-y-6" data-testid="checkin-page">
     <h1 className="text-[30px] leading-tight">{t("checkin.title")}</h1>
+    {draft.taskId ? <CurrentFollowupEntry taskId={draft.taskId} occurredAt={draft.occurredAt} /> : null}
     <p role="status" className="text-[15px] text-ink-muted">{t(persistenceError ? "storage.memoryOnly" : "checkin.draft")}</p>
     <p className="text-ink-muted" aria-label={`${index + 1} / 4`}>{index + 1} / 4</p>
     {step === "mood" ? <fieldset><legend className="mb-4 text-[24px]">{t("checkin.moodTitle")}</legend><div className="grid gap-3">{moods.map(mood => { const Icon = moodIcons[mood]; return <Button key={mood} variant="secondary" className="justify-start text-[17px]" aria-pressed={draft.mood === mood} data-testid={`mood-${mood}`} onClick={() => patch(draft.id, { mood })}><Icon aria-hidden="true" className="h-5 w-5 shrink-0" /><span className="flex-1 text-left">{t(`checkin.mood.${mood}`)}</span>{draft.mood === mood ? <><Check className="h-5 w-5" aria-hidden="true" /><span className="sr-only">{t("checkin.selected")}</span></> : null}</Button>; })}</div></fieldset> : null}

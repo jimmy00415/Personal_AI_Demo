@@ -1,6 +1,11 @@
 import type { Locale } from "./types";
 
 export const messages = {
+  "care.superseded": { zh: "這項較早行動已由更正紀錄取代；原有聯絡情況保留。", en: "This earlier action is superseded by a corrected record. Its contact history is retained." },
+  "care.supersededStatus": { zh: "已由更正取代", en: "Superseded" },
+  "care.previousDraft": { zh: "這是較早日期的草稿，內容與發生時間會保留。今天的跟進需要新的本人確認。", en: "This is an earlier draft. Its content and occurrence time are retained. Today's follow-up needs a new confirmation." },
+  "care.startCurrent": { zh: "開始今天的跟進紀錄", en: "Start today's follow-up record" },
+  "care.newEntryTime": { zh: "新紀錄的發生與輸入時間", en: "New record occurrence and entry time" },
   "care.viewTask": { zh: "查看事項", en: "View task" },
   "today.routineTitle": { zh: "記錄今天的身心情況", en: "Record today's mood and body" },
   "today.routineBody": { zh: "按自己的步伐記錄，也可以查看今天的事項。", en: "Record at your own pace and check today's tasks." },

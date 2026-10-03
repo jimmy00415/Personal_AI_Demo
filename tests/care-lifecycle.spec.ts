@@ -238,3 +238,119 @@ test("visible_task_counts_and_touch_targets_match_in_english_at_320px", async ({
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+async function confirmFollowup(page: Page, change: "no-dizzy" | "still" | "worse", measure = true) {
+  await page.getByTestId("mood-okay").click();
+  await page.getByTestId("checkin-next").click();
+  await page.getByTestId("body-dizzy").click();
+  await page.getByTestId(`followup-${change}`).click();
+  await page.getByTestId("checkin-next").click();
+  await page.getByTestId("checkin-next").click();
+  if (measure) {
+    await page.getByTestId("followup-measurement").click();
+    await page.getByLabel("收縮壓（mmHg）").fill("145");
+    await page.getByLabel("舒張壓（mmHg）").fill("89");
+    await page.getByTestId("observation-save").click();
+  }
+  await page.getByTestId("checkin-save").click();
+  await expect(page.getByTestId("followup-checkin-receipt")).toContainText("已完成記錄事項");
+}
+for (const initial of ["no-dizzy", "worse"] as const) test(`completed_followup_correction_reconciles_source_revision: ${initial}`, async ({ page }) => {
+  await start(page, "next-morning", "/care?task=task-morning");
+  await page.getByTestId("task-checkin").click();
+  await confirmFollowup(page, initial);
+  const original = await snapshot(page);
+  await page.getByTestId("checkin-receipt").getByRole("button", { name: "更正這項紀錄", exact: true }).click();
+  await confirmFollowup(page, initial === "worse" ? "no-dizzy" : "worse", false);
+  const corrected = await snapshot(page);
+  expect(corrected.checkIns).toHaveLength(1);
+  expect(corrected.checkIns[0].revision).toBe(2);
+  expect(corrected.checkIns[0].occurredAt).toBe(original.checkIns[0].occurredAt);
+  expect(corrected.checkIns[0].enteredAt).toBe(original.checkIns[0].enteredAt);
+  expect(corrected.episodes[0].answers.nextMorning).toBe(initial === "worse" ? "no-dizzy" : "worse");
+  expect(corrected.episodes[0].disposition).toBe(initial === "worse" ? "ordinary" : "worsening");
+  const activeNext = corrected.tasks.filter(t => t.id.startsWith("task-next-") && t.status !== "cancelled" && t.status !== "completed");
+  expect(activeNext).toHaveLength(initial === "worse" ? 0 : 1);
+  expect(corrected.tasks.find(t => t.id === "task-contact")).toEqual(original.tasks.find(t => t.id === "task-contact"));
+  expect(isDemoState(corrected)).toBe(true);
+  await page.reload();
+  expect((await snapshot(page)).episodes[0].answers.nextMorning).toBe(initial === "worse" ? "no-dizzy" : "worse");
+});
+
+test("confirmed_corrections_preserve_responded_contact_history_and_create_current_next_step", () => {
+  useAppStore.getState().applyScenario("next-morning");
+  const draft = useAppStore.getState().beginTaskCheckIn("task-morning", "worse");
+  if (!draft.ok) throw Error(draft.code);
+  useAppStore.getState().patchCheckIn(draft.value, { mood: "okay", body: "dizzy", step: "review" });
+  const at = useAppStore.getState().demo.clock;
+  useAppStore.getState().saveObservation({ id: "current-bp-correction", patientId: "may", occurredAt: at, enteredAt: at, source: "home-measure", systolic: 145, diastolic: 89, revision: 1 });
+  useAppStore.getState().saveCheckIn(draft.value);
+  let state = useAppStore.getState().demo;
+  const checkIn = state.checkIns[0];
+  const next = state.tasks.find(t => t.id.startsWith("task-next-"))!;
+  useAppStore.getState().recordContactOutcome(next.id, "left-message", "已留下聯絡電話");
+  const history = useAppStore.getState().demo.tasks.find(t => t.id === next.id)!;
+  useAppStore.getState().editCheckIn(checkIn.id);
+  useAppStore.getState().patchCheckIn(checkIn.draftId, { followupChange: "no-dizzy", step: "review" });
+  useAppStore.getState().saveCheckIn(checkIn.draftId);
+  state = useAppStore.getState().demo;
+  expect(state.tasks.find(t => t.id === next.id)).toMatchObject({ contactOutcome: history.contactOutcome, contactNote: history.contactNote, ownerId: history.ownerId, status: history.status });
+  expect(state.tasks.find(t => t.id === next.id)).toHaveProperty("supersededByCheckInRevision", 2);
+  expect(selectTodayTasks(state).some(t => t.id === next.id)).toBe(false);
+  useAppStore.getState().editCheckIn(checkIn.id);
+  useAppStore.getState().patchCheckIn(checkIn.draftId, { followupChange: "still", step: "review" });
+  useAppStore.getState().saveCheckIn(checkIn.draftId);
+  state = useAppStore.getState().demo;
+  expect(state.tasks.filter(t => t.id.startsWith("task-next-") && !("supersededByCheckInRevision" in t) && t.status === "pending")).toHaveLength(1);
+  expect(state.episodes[0].disposition).toBe("uncertain");
+  const latest = state.tasks.find(t => t.id === "task-morning")!;
+  expect(value(completeCheckInTask(state, latest.id, checkIn.id))).toEqual(state);
+  expect(isDemoState(state)).toBe(true);
+});
+
+test("midnight_resumed_task_draft_preserves_history_and_offers_current_confirmed_path", async ({ page }) => {
+  const state = createScenario("next-morning"); state.clock = "2026-09-17T23:59:00+08:00";
+  state.drafts.push({ id: "draft-followup-task-morning-1", patientId: "may", occurredAt: state.clock, mood: "low", body: "dizzy", followupChange: "worse", note: "昨晚尚未確認的補充", taskId: "task-morning", step: "review", revision: 3 });
+  state.clock = "2026-09-18T00:01:00+08:00";
+  await page.addInitScript(d => { if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(d)); }, state);
+  await page.goto("/check-in?draft=draft-followup-task-morning-1");
+  await expect(page.getByTestId("checkin-review")).toContainText("昨晚尚未確認的補充");
+  await page.getByTestId("task-current-checkin").click();
+  await confirmFollowup(page, "still");
+  const saved = await snapshot(page);
+  expect(saved.drafts.find(d => d.id === state.drafts[0].id)).toEqual(state.drafts[0]);
+  expect(saved.checkIns[0]).toMatchObject({ occurredAt: state.clock, enteredAt: state.clock, taskId: "task-morning", followupChange: "still" });
+  expect(saved.tasks.find(t => t.id === "task-morning")?.status).toBe("completed");
+  expect(isDemoState(saved)).toBe(true);
+});
+
+test("reopened_contact_detail_displays_saved_outcome_and_selection", async ({ page }) => {
+  await start(page, "next-morning", "/care?task=task-contact");
+  await page.getByLabel("聯絡情況補充").fill("研究任務：已留言");
+  await page.getByTestId("contact-left-message").click();
+  await page.reload();
+  await expect(page.getByTestId("contact-outcome")).toContainText("已留言，仍需跟進");
+  await expect(page.getByTestId("contact-left-message")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("聯絡情況補充")).toHaveValue("研究任務：已留言");
+});
+
+test("nonclinical_correction_keeps_current_contact_without_duplicate_action", () => {
+  useAppStore.getState().applyScenario("next-morning");
+  const draft = useAppStore.getState().beginTaskCheckIn("task-morning", "still"); if (!draft.ok) throw Error(draft.code);
+  useAppStore.getState().patchCheckIn(draft.value, { mood: "okay", body: "dizzy", step: "review" });
+  const at = useAppStore.getState().demo.clock;
+  useAppStore.getState().saveObservation({ id: "current-bp-nonclinical", patientId: "may", occurredAt: at, enteredAt: at, source: "home-measure", systolic: 145, diastolic: 89, revision: 1 });
+  useAppStore.getState().saveCheckIn(draft.value);
+  const before = useAppStore.getState().demo;
+  const checkIn = before.checkIns[0]; const contact = before.tasks.find(t => t.id.startsWith("task-next-"))!;
+  useAppStore.getState().recordContactOutcome(contact.id, "left-message", "已留言");
+  useAppStore.getState().editCheckIn(checkIn.id);
+  useAppStore.getState().patchCheckIn(checkIn.draftId, { mood: "low", step: "review" });
+  useAppStore.getState().saveCheckIn(checkIn.draftId);
+  const after = useAppStore.getState().demo;
+  expect(after.tasks.filter(t => t.id.startsWith("task-next-"))).toHaveLength(1);
+  expect(after.tasks.find(t => t.id === contact.id)).toMatchObject({ contactOutcome: "left_message", contactNote: "已留言", status: "pending" });
+  expect(after.tasks.find(t => t.id === contact.id)).not.toHaveProperty("supersededByCheckInRevision");
+  expect(after.tasks.find(t => t.id === "task-morning")?.completionEvidence?.checkInRevision).toBe(2);
+  expect(isDemoState(after)).toBe(true);
+});

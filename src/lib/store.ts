@@ -363,8 +363,9 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     if (!task || demo.context.actorId !== "may") return { ok: false, code: "task-missing" };
     if (["completed", "cancelled"].includes(task.status)) return { ok: false, code: "task-inactive" };
     if (task.scheduledAt && Date.parse(task.scheduledAt) > Date.parse(demo.clock)) return { ok: false, code: "not-due" };
-    const id = followupDraftId(task);
-    const prior = demo.drafts.find(d => d.id === id);
+    const currentId = followupDraftId(task, demo.clock);
+    const prior = demo.drafts.find(d => d.id === currentId) ?? demo.drafts.find(d => d.id === followupDraftId(task) && clockParts(d.occurredAt).dateKey === clockParts(demo.clock).dateKey);
+    const id = prior?.id ?? currentId;
     const draft: CheckInDraft = { ...(prior ?? { id, patientId: task.patientId, occurredAt: demo.clock, mood: null, body: null, note: "", step: "mood", taskId, revision: 1 }), ...(change ? { followupChange: change } : {}) };
     set({ demo: { ...demo, drafts: prior ? demo.drafts.map(d => d.id === id ? draft : d) : [...demo.drafts, draft] } });
     savePersisted(get());
