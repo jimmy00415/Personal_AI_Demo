@@ -156,6 +156,7 @@ test("the whole recording journey runs without console errors", async ({ page })
   await page.getByTestId("prep-visit").click();
   await expect(page.getByTestId("visit-brief")).toBeVisible();
   await page.getByTestId("open-booking").click();
+  await page.getByTestId("book-review-open").click();
   await page.getByTestId("book-confirm").click();
   await expect(page.getByTestId("book-receipt")).toBeVisible();
   await page.getByTestId("nav-today").click();

@@ -1,4 +1,5 @@
 import { clockParts } from "../clock";
+import { clinicSlots } from "./fixtures";
 import type { ActionResult, ActorId, CareTask, DemoState, PatientId, ShareCategory } from "./types";
 
 export type FollowupChange = "no-dizzy" | "still" | "worse";
@@ -7,6 +8,50 @@ export type DoseCorrection = "unknown" | "user_confirmed_taken" | "user_reported
 const fail = (code: string): ActionResult<never> => ({ ok: false, code });
 const success = (value: DemoState): ActionResult<DemoState> => ({ ok: true, value });
 const mayEdit = (s: DemoState, patientId: PatientId) => s.context.actorId === "may" && s.context.patientId === patientId;
+
+/** Only appointment-linked preparation is invalidated; contact and completed history remain evidence. */
+function invalidateAppointmentPreparation(state: DemoState, appointmentId: string): DemoState {
+  return { ...state,
+    tasks: state.tasks.map(t => t.sourceRecordIds.includes(appointmentId) && (t.kind === "appointment" || t.kind === "check-in") && t.status !== "completed" && t.status !== "cancelled" ? { ...t, status: "cancelled", revision: t.revision + 1, ...(t.kind === "check-in" ? { workflowRevision: t.revision + 1 } : {}) } : t),
+    briefs: state.briefs.map(b => b.appointmentId === appointmentId ? { ...b, status: "draft", confirmedAt: null, revision: b.revision + 1 } : b),
+  };
+}
+export function setAppointment(state: DemoState, appointmentId: string, slotId: string): ActionResult<DemoState> {
+  const appointment = state.appointments.find(a => a.id === appointmentId);
+  if (!appointment) return fail("appointment-missing");
+  if (!mayEdit(state, appointment.patientId)) return fail("patient-only");
+  if (state.episodes.filter(e => e.patientId === appointment.patientId).at(-1)?.disposition === "urgent") return fail("urgent-help-required");
+  const slot = clinicSlots.find(s => s.id === slotId);
+  if (!slot) return fail("slot-missing");
+  if (!validInstant(slot.at) || Date.parse(slot.at) <= Date.parse(state.clock)) return fail("past-slot");
+  const bookingStatus = slot.current ? "kept" : "booked";
+  if (appointment.status === "scheduled" && appointment.scheduledAt === slot.at && appointment.bookingStatus === bookingStatus) return success(state);
+  const changed = appointment.scheduledAt !== slot.at || appointment.status !== "scheduled";
+  const next = changed ? invalidateAppointmentPreparation(state, appointmentId) : state;
+  return success({ ...next, appointments: next.appointments.map(a => a.id === appointmentId ? { ...a, scheduledAt: slot.at, location: slot.clinic, status: "scheduled", bookingStatus, revision: a.revision + 1 } : a) });
+}
+export function cancelAppointment(state: DemoState, appointmentId: string): ActionResult<DemoState> {
+  const appointment = state.appointments.find(a => a.id === appointmentId);
+  if (!appointment) return fail("appointment-missing");
+  if (!mayEdit(state, appointment.patientId)) return fail("patient-only");
+  if (appointment.status === "completed") return fail("appointment-completed");
+  if (appointment.status === "cancelled") return success(state);
+  const next = invalidateAppointmentPreparation(state, appointmentId);
+  return success({ ...next, appointments: next.appointments.map(a => a.id === appointmentId ? { ...a, status: "cancelled", bookingStatus: "none", revision: a.revision + 1 } : a) });
+}
+/** David authors his own local reminder, only while appointment details are authorised. */
+export function createAccompanyTask(state: DemoState, appointmentId: string): ActionResult<DemoState> {
+  if (state.context.actorId !== "david") return fail("caregiver-only");
+  const appointment = state.appointments.find(a => a.id === appointmentId && a.patientId === state.context.patientId && a.status === "scheduled");
+  const grant = state.grants.find(g => g.patientId === state.context.patientId && g.recipientId === "david" && g.status === "active" && g.level !== "alerts-only" && g.categories.includes("appointments"));
+  if (!appointment || !grant) return fail("appointment-unavailable");
+  const id = `task-accompany-${appointment.id}`;
+  const prior = state.tasks.find(t => t.id === id);
+  if (prior && prior.ownerId !== "david") return fail("owner-mismatch");
+  if (prior?.status === "scheduled" && prior.scheduledAt === appointment.scheduledAt) return success(state);
+  const task: CareTask = { ...prior, id, patientId: appointment.patientId, ownerId: "david", proposedOwnerId: null, kind: "accompany", status: "scheduled", scheduledAt: appointment.scheduledAt, sourceRecordIds: [appointment.id], shareCategory: "appointments", contactOutcome: null, contactNote: "", title: { zh: "我的陪同覆診事項", en: "My reminder to accompany May" }, revision: (prior?.revision ?? 0) + 1 };
+  return success({ ...state, tasks: prior ? state.tasks.map(t => t.id === id ? task : t) : [...state.tasks, task] });
+}
 
 /** Parse only explicit ISO instants, including a real calendar date (Date.parse normalises Feb 30). */
 export function validInstant(at: string): boolean {

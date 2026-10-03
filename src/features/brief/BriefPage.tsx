@@ -262,9 +262,7 @@ export function BriefPage() {
       ) : null}
 
       {reminderError ? <p role="alert">{t(reminderError === "past-time" || reminderError === "invalid-time" ? `care.${reminderError}` : "care.error")}</p> : null}
-      <p className="mt-8 text-[14px] text-ink-soft">
-        {L(appt.title)} · {formatDateTime(appt.at, locale)}
-      </p>
+      {appt ? <p className="mt-8 text-[14px] text-ink-soft">{L(appt.title)} · {formatDateTime(appt.at, locale)}</p> : <p className="mt-8" data-testid="brief-appointment-unavailable">{t("book.noScheduled")} <Link href="/book" className="inline-flex min-h-11 items-center text-brand">{t("book.title")}</Link></p>}
       <p className="mt-6 text-[13px] text-ink-soft">{t("ask.boundary")}</p>
     </div>
   );

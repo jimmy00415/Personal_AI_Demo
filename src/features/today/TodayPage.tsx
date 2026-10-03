@@ -160,7 +160,7 @@ export function TodayPage() {
             <ListRow
               title={t("today.nextAppt")}
               meta={formatDateTime(appt.at, locale)}
-              onClick={() => router.push(episodeSaved ? "/book" : "/health")}
+              onClick={() => router.push("/book")}
             />
           </GroupedList>
         </section>

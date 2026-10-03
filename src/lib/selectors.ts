@@ -1,4 +1,5 @@
 import { appointments, bpReadings, michelleMeds, report, currentDemo } from "./seed";
+import { translate } from "./i18n";
 import { selectBpAverage } from "./demo/selectors";
 import { clockParts, formatDateTime, formatShortDate, formatTime } from "./clock";
 import type { Answers, Appointment, BookingStatus, JourneyPhase } from "./types";
@@ -24,7 +25,7 @@ export function latestMichelleBp() {
 }
 
 export function michelleAppt(list: Appointment[] = appointments) {
-  return list.find((a) => a.personId === "michelle")!;
+  return list.find((a) => a.personId === "michelle");
 }
 
 export function motherAppt() {
@@ -136,7 +137,7 @@ export function briefText(
     ...state.questions.filter((q) => q.added).map((q) => `• ${L(q.text)}`),
     "",
     locale === "en" ? "Appointment" : "覆診時間",
-    formatDateTime(michelleAppt(state.appointments).at, locale),
+    michelleAppt(state.appointments) ? formatDateTime(michelleAppt(state.appointments)!.at, locale) : translate("book.noScheduled", locale),
   ];
   return lines.join("\n");
 }

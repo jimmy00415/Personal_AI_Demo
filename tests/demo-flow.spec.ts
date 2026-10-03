@@ -156,7 +156,7 @@ test("agent books earlier visit from known records", async ({ page }) => {
   await page.getByTestId("add-to-journey").click();
   await page.getByTestId("prep-visit").click();
   await page.getByTestId("open-booking").click();
-  await expect(page.getByTestId("book-packet")).toContainText("陳美玲");
+  await expect(page.getByTestId("book-packet")).toContainText("May");
   await expect(page.getByTestId("book-packet")).toContainText("151/94");
   await expect(page.getByTestId("book-packet")).toContainText("144/90");
   await expect(page.getByTestId("book-packet")).toContainText("Penicillin");
@@ -164,10 +164,11 @@ test("agent books earlier visit from known records", async ({ page }) => {
   await expect(page.getByTestId("book-page")).toContainText("9月22日");
   await expect(page.getByTestId("book-page")).not.toContainText("已連接醫健通");
   await expect(page.getByTestId("book-page")).not.toContainText("診所已確認");
-  await expect(page.getByTestId("book-confirm")).toBeVisible({ timeout: 4000 });
+  await expect(page.getByTestId("book-review-open")).toBeVisible();
+  await page.getByTestId("book-review-open").click();
   await page.getByTestId("book-confirm").click();
   await expect(page.getByTestId("book-receipt")).toContainText("9月17日");
-  await expect(page.getByTestId("toast")).toContainText("已更新你的行程");
+  await expect(page.getByTestId("toast")).toContainText("已更新康伴內的本地行程");
   await page.getByTestId("nav-care").click();
   await expect(page.getByTestId("follow-appt-row")).toContainText("9月17日");
   await page.getByTestId("nav-today").click();

@@ -27,7 +27,7 @@ import { ensureAssistantSession, getHelpDisposition, getLocalAssistantReply, has
 import { symptomLine } from "./selectors";
 import { NEXT_CLOCK, OPENING_CLOCK } from "./types";
 import type { ActionResult, ActorId, CheckInDraft, DemoState, Observation, ScenarioId } from "./demo/types";
-import { cancelTask, completeCheckInTask, createAfterVisitTask, followupDraftId, recordContactOutcome, rescheduleTask, scheduleFollowup, setDoseStatus, snoozeTask, type ContactOutcome, type DoseCorrection, type FollowupChange } from "./demo/care";
+import { setAppointment, cancelAppointment, createAccompanyTask, cancelTask, completeCheckInTask, createAfterVisitTask, followupDraftId, recordContactOutcome, rescheduleTask, scheduleFollowup, setDoseStatus, snoozeTask, type ContactOutcome, type DoseCorrection, type FollowupChange } from "./demo/care";
 import { createCheckInDraft, updateCheckInDraft, commitCheckIn, saveObservation } from "./demo/check-in";
 import { createScenario } from "./demo/scenarios";
 import { loadDemo, saveDemo, loadPreferences, savePreferences, getEmergencySession, setEmergencySession } from "./demo/persistence";
@@ -142,7 +142,10 @@ interface Actions {
   prepareMotherBrief: () => void;
   addAccompany: () => void;
   selectSlot: (id: string) => void;
-  bookSlot: (id: string) => void;
+  bookSlot: (id: string) => ActionResult<void>;
+  setAppointment: (appointmentId: string, slotId: string) => ActionResult<void>;
+  cancelAppointment: (appointmentId: string) => ActionResult<void>;
+  createAccompanyTask: (appointmentId: string) => ActionResult<void>;
 }
 
 type NextId = "no-dizzy" | "still" | "worse";
@@ -233,24 +236,9 @@ function sceneWorld(id: SceneId): AppState {
 function applySlot(appointments: Appointment[], tasks: CareTask[], slotId: string) {
   const slot = clinicSlots.find((s) => s.id === slotId);
   if (!slot) return { appointments, tasks, bookingStatus: "none" as BookingStatus, selectedSlotId: slotId };
-  const time = clockParts(slot.at);
-  const hhmm = `${String(time.hour).padStart(2, "0")}:${String(time.minute).padStart(2, "0")}`;
   return {
     appointments: appointments.map((a) => (a.id === "appt-gp" ? { ...a, at: slot.at } : a)),
-    tasks: [
-      ...tasks.filter((t) => t.id !== "task-contact"),
-      {
-        id: "task-contact",
-        personId: "michelle" as const,
-        date: time.dateKey,
-        time: hhmm,
-        title: slot.current
-          ? { zh: "原定覆診", en: "Booked follow-up" }
-          : { zh: "較早覆診", en: "Earlier follow-up" },
-        kind: "contact" as const,
-        state: "scheduled" as const,
-      },
-    ],
+    tasks,
     bookingStatus: (slot.current ? "kept" : "booked") as BookingStatus,
     selectedSlotId: slotId,
   };
@@ -351,6 +339,9 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
   };
   return {
   ...world(),
+  setAppointment: (id, slotId) => applyCare(setAppointment(get().demo, id, slotId)),
+  cancelAppointment: id => applyCare(cancelAppointment(get().demo, id)),
+  createAccompanyTask: id => applyCare(createAccompanyTask(get().demo, id)),
   setDoseStatus: (id, status) => applyCare(setDoseStatus(get().demo, id, status)),
   scheduleFollowup: at => applyCare(scheduleFollowup(get().demo, get().demo.context.patientId, at)),
   cancelCareTask: id => applyCare(cancelTask(get().demo, id)),
@@ -775,34 +766,10 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     get().showToast(get().locale === "en" ? "Brief is ready" : "摘要已準備好");
     savePersisted(get());
   },
-  addAccompany: () => {
-    if (get().accompanyAdded) return;
-    set({
-      accompanyAdded: true,
-      tasks: [
-        ...get().tasks,
-        {
-          id: "task-accompany",
-          personId: "michelle",
-          relatedPersonId: "lai-wah",
-          date: "2026-09-23",
-          time: "10:00",
-          title: { zh: "陪媽媽覆診", en: "Accompany Mum to her appointment" },
-          kind: "accompany",
-          state: "scheduled",
-        },
-      ],
-    });
-    get().showToast(get().locale === "en" ? "Added to your list" : "已加入你的待辦事項");
-    savePersisted(get());
-  },
+  addAccompany: () => { get().createAccompanyTask("appt-gp"); },
   selectSlot: (selectedSlotId) => set({ selectedSlotId }),
   bookSlot: (id) => {
-    const s = get();
-    const next = applySlot(s.appointments, s.tasks, id);
-    set(next);
-    get().showToast(get().locale === "en" ? "Your schedule was updated" : "已更新你的行程");
-    savePersisted(get());
+    return get().setAppointment("appt-gp", id);
   },
   };
 });
