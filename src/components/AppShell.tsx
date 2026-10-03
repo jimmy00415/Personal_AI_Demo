@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SharedView } from "@/features/sharing/SharingPreview";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { HeartPulse, Home, Settings, Users, ListTodo } from "lucide-react";
@@ -30,12 +31,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const hydrated = useAppStore((s) => s.hydrated);
   const persistenceError = useAppStore((s) => s.persistenceError);
   const actorId = useAppStore((s) => s.demo.context.actorId);
-  const sharedLegacyView = useAppStore((s) => s.viewingPersonId === "lai-wah");
   const actorName = useAppStore((s) => s.demo.profiles.find(p => p.id === s.demo.context.actorId)?.displayName ?? "");
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     hydrate();
+    const sync = (event: StorageEvent) => { if (event.key === "caremate-v4") useAppStore.getState().syncFromStorage(); };
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
   }, [hydrate]);
 
   useEffect(() => {
@@ -56,7 +59,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { href: "/memory", label: t("nav.memory"), testId: "link-memory" },
     { href: "/brief", label: t("nav.brief"), testId: "link-visit" },
     { href: "/book", label: t("today.book"), testId: "link-book" },
-    { href: "/about", label: t("nav.about"), testId: "link-privacy" },
+    { href: "/sharing", label: t("sharing.title"), testId: "link-privacy" },
     { href: "/settings", label: t("nav.settings"), testId: "link-settings" },
   ];
 
@@ -67,10 +70,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const storageNotice = persistenceError ? <p role="alert" data-testid="persistence-error" className="relative z-50 bg-amber-50 p-4 text-ink">{t("storage.error")}</p> : null;
-  // Legacy clinical pages have no permission-aware renderer. Keep them closed for David
-  // until their task-specific migrations install the shared projection.
-  const restricted = !["/dev", "/settings", "/about"].some(path => samePath(pathname, path)) && (actorId === "david" || sharedLegacyView && pathname.startsWith("/family"));
-  const content = restricted ? <p data-testid="shared-unavailable" className="py-8">{t("demo.sharedPending")}</p> : children;
+  // Patient routes include mixed legacy prose. David always uses the current shared boundary.
+  const sharedRoute = actorId === "david" && !["/dev", "/settings", "/about", "/sharing", "/privacy"].some(path => samePath(pathname, path));
+  const content = sharedRoute ? <SharedView /> : children;
 
   if (hideChrome) {
     return (
@@ -99,6 +101,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 data-testid={item.testId}
+                aria-label={t(item.key)}
                 className={cn("nav-item flex min-h-11 items-center gap-3 rounded-[12px] px-3 text-[15px]", isActive(item.href) ? "bg-brand-soft text-brand-deep" : "text-ink-muted hover:bg-surface")}
               >
                 <Icon className="h-4 w-4 shrink-0" />
@@ -111,7 +114,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="my-3 mx-2 h-px bg-line" />
               <Link
                 href="/ask"
-                data-testid="nav-ask"
+                data-testid="nav-ask" aria-label={t("nav.ask")}
                 className="nav-item flex min-h-11 items-center gap-3 rounded-[12px] px-3 text-[15px] text-ink-muted hover:bg-surface"
               >
                 <span className="flex h-4 w-4 items-center justify-center text-[13px]">✦</span>
@@ -121,8 +124,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
         </nav>
         <div className="relative px-1">
-          <button type="button" data-testid="profile-menu-btn" onClick={() => setMenuOpen((v) => !v)} className="flex min-h-11 w-full items-center gap-2 rounded-[12px] px-2 text-left hover:bg-surface">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-[11px] text-white">MC</span>
+          <button type="button" data-testid="profile-menu-btn" aria-label={actorName} onClick={() => setMenuOpen((v) => !v)} className="flex min-h-11 w-full items-center gap-2 rounded-[12px] px-2 text-left hover:bg-surface">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-[11px] text-white">{actorId === "may" ? "MC" : "DC"}</span>
             <span className="hidden lg:block text-[13px]">{actorName}</span>
           </button>
           {menuOpen ? (

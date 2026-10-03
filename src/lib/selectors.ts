@@ -1,3 +1,4 @@
+import { selectSharingProjection, sharedExportText } from "./demo/sharing";
 import { appointments, bpReadings, michelleMeds, report, currentDemo } from "./seed";
 import { translate } from "./i18n";
 import { selectBpAverage } from "./demo/selectors";
@@ -11,8 +12,7 @@ export function michelleBp() {
 
 export function motherBp() {
   const s = currentDemo();
-  const grant = s.grants.find(g => g.recipientId === "david" && g.status === "active" && g.level === "full" && g.categories.includes("measurements"));
-  return grant ? s.observations.map(r => ({ ...r, personId: "lai-wah" as const })) : [];
+  return selectSharingProjection(s, s.context.patientId, "david").observations.map(r => ({ ...r, personId: "lai-wah" as const }));
 }
 
 export function bpAverage() {
@@ -30,8 +30,7 @@ export function michelleAppt(list: Appointment[] = appointments) {
 
 export function motherAppt() {
   const s = currentDemo();
-  const grant = s.grants.find(g => g.recipientId === "david" && g.status === "active" && g.level !== "alerts-only" && g.categories.includes("appointments"));
-  const appointment = grant ? s.appointments.find(a => a.status === "scheduled") : undefined;
+  const appointment = selectSharingProjection(s, s.context.patientId, "david").appointments.find(a => a.status === "scheduled");
   return { id: appointment?.id ?? "unshared", personId: "lai-wah" as const, title: appointment?.title ?? { zh: "", en: "" }, at: appointment?.scheduledAt ?? s.clock };
 }
 
@@ -93,6 +92,10 @@ export function briefText(
   },
   locale: Locale,
 ) {
+  if (currentDemo().context.actorId === "david") {
+    const result = sharedExportText(currentDemo(), "may", "david", locale);
+    return result.ok ? result.value : translate("sharing.empty", locale);
+  }
   const L = (x: Localized) => (locale === "en" ? x.en : x.zh);
   const avg = bpAverage();
   const lines = [

@@ -30,6 +30,7 @@ export function SettingsPage() {
       <Button data-testid="lite-toggle-settings" className="mt-2" variant={liteMode ? "primary" : "secondary"} onClick={() => setLiteMode(!liteMode)}>
         {liteMode ? t("lite.on") : t("lite.off")}
       </Button>
+      <Link href="/sharing" className="mt-6 flex min-h-11 items-center text-brand">{t("sharing.title")}</Link>
       <h2 className="mt-8 text-[13px] text-ink-soft">{t("settings.data")}</h2>
       <p className="measure mt-2 text-[15px] text-ink-muted">{t("settings.dataBody")}</p>
       {confirmClear ? (

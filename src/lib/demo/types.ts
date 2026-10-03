@@ -160,6 +160,11 @@ export interface BriefPacket extends PatientEntity {
 export interface MemoryItem extends PatientEntity {
   value: Localized; detail: Localized; source: SourceClass; enteredAt: string; enabled: boolean; pendingConfirm: boolean; sourceRecordIds: string[]; revision: number;
 }
+/** Sharing DTOs deliberately cannot carry arbitrary notes, response payloads or completion history. */
+export type SharedCheckIn = Pick<DailyCheckIn, "id" | "patientId" | "occurredAt" | "enteredAt" | "revision"> & { body?: BodyFeeling; mood?: Mood };
+export type SharedTask = Pick<CareTask, "id" | "patientId" | "ownerId" | "proposedOwnerId" | "kind" | "status" | "scheduledAt" | "shareCategory" | "title" | "revision" | "sourceRecordIds">;
+export type SharedEvent = Pick<AttentionEvent, "id" | "patientId" | "recipientId" | "taskId" | "status" | "occurredAt" | "revision" | "sourceRecordIds"> & { text: Localized };
+export type SharedReport = Pick<ImportedReport, "id" | "patientId" | "occurredAt" | "enteredAt" | "source" | "category" | "revision" | "title" | "originalText"> & { results: Pick<LabResult, "id" | "name" | "value" | "unit">[] };
 export interface SharingProjection {
   patientId: PatientId;
   recipientId: RecipientId;
@@ -172,12 +177,12 @@ export interface SharingProjection {
   sourceRecordIds: string[];
   healthRecords: HealthRecord[];
   observations: Observation[];
-  checkIns: DailyCheckIn[];
+  checkIns: SharedCheckIn[];
   medicationDoses: MedicationDose[];
   appointments: Appointment[];
-  reports: ImportedReport[];
-  tasks: CareTask[];
-  events: AttentionEvent[];
+  reports: SharedReport[];
+  tasks: SharedTask[];
+  events: SharedEvent[];
   briefs: BriefPacket[];
 }
 export interface LocalAssistantContext {

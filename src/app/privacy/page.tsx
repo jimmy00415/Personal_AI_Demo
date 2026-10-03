@@ -1,5 +1,2 @@
-import { PrivacyPage } from "@/features/settings/SettingsPages";
-
-export default function Page() {
-  return <PrivacyPage />;
-}
+import { SharingPage } from "@/features/sharing/SharingPage";
+export default SharingPage;

@@ -1,3 +1,4 @@
+import { selectSharingProjection } from "./sharing";
 /** Temporary adapters for existing routes. Facts are read/written only through DemoState. */
 import type { AppState } from "../store";
 import type { DemoState, HealthEpisode } from "./types";
@@ -25,9 +26,10 @@ export function projectLegacy(demo: DemoState, activeEmergencyEpisodeId: string 
   const mine = demo.context.actorId === "may";
   const episode = mine ? currentEpisode(demo) : undefined;
   const session = mine ? demo.assistantSessions.find(s => s.episodeId === episode?.id) : undefined;
-  const grant = demo.grants.find(g => g.recipientId === "david" && g.status === "active");
-  const contact = demo.tasks.find(t => t.id === "task-contact");
-  const followup = demo.tasks.find(t => t.id === "task-morning");
+  const shared = selectSharingProjection(demo, demo.context.patientId, "david");
+  const grant = shared.status === "active" ? shared : null;
+  const contact = mine ? demo.tasks.find(t => t.id === "task-contact") : undefined;
+  const followup = mine ? demo.tasks.find(t => t.id === "task-morning") : undefined;
   const emergency = mine && activeEmergencyEpisodeId !== null;
   return {
     clock: demo.clock,
@@ -35,25 +37,25 @@ export function projectLegacy(demo: DemoState, activeEmergencyEpisodeId: string 
     step: emergency ? "urgent_help" as const : episode?.step ?? "urgent" as const,
     phase: emergency ? "urgent_help" as const : episode?.phase ?? "concern_open" as const,
     messages: session?.messages ?? [], answers: episode?.answers ?? { ...emptyAnswers }, episodeSaved: episode?.saved ?? false,
-    doses: mine ? demo.medicationDoses.map(d => ({ id: d.id, personId: "michelle" as const, medicationId: d.medicationId, scheduledAt: d.scheduledAt, status: d.status, occurrenceAt: d.occurredAt, enteredAt: d.enteredAt })) : [],
-    records: mine ? demo.healthRecords.map(r => ({ id: r.id, personId: "michelle" as const, kind: r.kind, occurredAt: r.occurredAt, enteredAt: r.enteredAt, title: r.title, summary: r.text, provenance: { source: r.source, occurredAt: r.occurredAt, enteredAt: r.enteredAt } })) : [],
+    doses: (mine ? demo.medicationDoses : shared.medicationDoses).map(d => ({ id: d.id, personId: "michelle" as const, medicationId: d.medicationId, scheduledAt: d.scheduledAt, status: d.status, occurrenceAt: d.occurredAt, enteredAt: d.enteredAt })),
+    records: (mine ? demo.healthRecords : shared.records).map(r => ({ id: r.id, personId: "michelle" as const, kind: r.kind, occurredAt: r.occurredAt, enteredAt: r.enteredAt, title: r.title, summary: r.text, provenance: { source: r.source, occurredAt: r.occurredAt, enteredAt: r.enteredAt } })),
     memories: mine ? demo.memories.map(m => ({ id: m.id, personId: "michelle" as const, value: m.value, detail: m.detail, source: m.source, enteredAt: m.enteredAt, excluded: !m.enabled, pendingConfirm: m.pendingConfirm })) : [],
     questions: mine ? demo.questions.map(q => ({ id: q.id, text: q.text, added: q.selected })) : [],
-    tasks: mine ? demo.tasks.map(t => {
+    tasks: (mine ? demo.tasks : shared.tasks).map(t => {
       const at = t.scheduledAt ? clockParts(t.scheduledAt) : clockParts(demo.clock);
       return { id: t.id, personId: "michelle" as const, date: at.dateKey, time: `${String(at.hour).padStart(2, "0")}:${String(at.minute).padStart(2, "0")}`, title: t.title,
         kind: t.kind === "check-in" ? t.id === "task-bp" ? "bp" as const : "followup" as const : t.kind === "after-visit" ? "contact" as const : t.kind,
         state: t.status === "snoozed" ? "scheduled" as const : t.kind === "medication" && t.status === "scheduled" && t.scheduledAt && Date.parse(t.scheduledAt) > Date.parse(demo.clock) ? "not_due" as const : t.status };
-    }) : [],
-    appointments: mine ? demo.appointments.filter(a => a.status !== "cancelled").map(a => ({ id: a.id, personId: "michelle" as const, title: a.title, at: a.scheduledAt })) : [],
+    }),
+    appointments: (mine ? demo.appointments : shared.appointments).filter(a => a.status !== "cancelled").map(a => ({ id: a.id, personId: "michelle" as const, title: a.title, at: a.scheduledAt })),
     contactStatus: contact?.contactOutcome ?? "not_contacted" as const, contactNote: contact?.contactNote ?? "",
     followup: episode?.followup ?? "none" as const,
     followupAt: followup && followup.status !== "cancelled" ? followup.scheduledAt : null,
     consent: { canViewAppointments: !!grant && grant.level !== "alerts-only" && grant.categories.includes("appointments"), canViewBp: !!grant && grant.level === "full" && grant.categories.includes("measurements"), canViewMedication: !!grant && grant.level === "full" && grant.categories.includes("medication") },
     sharingStopped: !grant,
-    motherBriefReady: demo.briefs.some(b => b.recipientId === "david" && b.status === "confirmed"),
-    accompanyAdded: demo.tasks.some(t => t.kind === "accompany" && t.status !== "cancelled"),
-    bookingStatus: demo.appointments.find(a => a.id === "appt-gp")?.bookingStatus ?? "none" as const,
+    motherBriefReady: false,
+    accompanyAdded: (mine ? demo.tasks : shared.tasks).some(t => t.kind === "accompany" && t.status !== "cancelled"),
+    bookingStatus: (mine ? demo.appointments : shared.appointments).find(a => a.id === "appt-gp")?.bookingStatus ?? "none" as const,
   };
 }
 

@@ -1,3 +1,4 @@
+import { selectSharingProjection } from "./sharing";
 import { clockParts } from "../clock";
 import { clinicSlots } from "./fixtures";
 import type { ActionResult, ActorId, CareTask, DemoState, PatientId, ShareCategory } from "./types";
@@ -43,9 +44,8 @@ export function cancelAppointment(state: DemoState, appointmentId: string): Acti
 /** David authors his own local reminder, only while appointment details are authorised. */
 export function createAccompanyTask(state: DemoState, appointmentId: string): ActionResult<DemoState> {
   if (state.context.actorId !== "david") return fail("caregiver-only");
-  const appointment = state.appointments.find(a => a.id === appointmentId && a.patientId === state.context.patientId && a.status === "scheduled");
-  const grant = state.grants.find(g => g.patientId === state.context.patientId && g.recipientId === "david" && g.status === "active" && g.level !== "alerts-only" && g.categories.includes("appointments"));
-  if (!appointment || !grant) return fail("appointment-unavailable");
+  const appointment = selectSharingProjection(state, state.context.patientId, "david").appointments.find(a => a.id === appointmentId && a.status === "scheduled");
+  if (!appointment) return fail("appointment-unavailable");
   const time = future(state, appointment.scheduledAt); if (!time.ok) return time;
   const id = `task-accompany-${appointment.id}`;
   const prior = state.tasks.find(t => t.id === id);

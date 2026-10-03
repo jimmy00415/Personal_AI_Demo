@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { setConsent, revokeConsent, type ConsentInput } from "./demo/sharing";
 import type {
   Answers,
   Appointment,
@@ -81,6 +82,9 @@ export interface AppState {
 }
 
 interface Actions {
+  setConsent: (input: ConsentInput) => ActionResult<void>;
+  revokeConsent: (grantId: string) => ActionResult<void>;
+  syncFromStorage: () => void;
   setDoseStatus: (id: string, status: DoseCorrection) => ActionResult<void>;
   scheduleFollowup: (at: string) => ActionResult<void>;
   cancelCareTask: (id: string) => ActionResult<void>;
@@ -306,6 +310,20 @@ function savedWorld(base: AppState): AppState {
   };
 }
 
+/** Merge permission revisions without overwriting unsaved clinical facts or tab context. */
+function mergeNewerPermissions(base: DemoState, incoming: DemoState): DemoState {
+  const newer = incoming.grants.filter(g => g.revision > (base.grants.find(old => old.id === g.id)?.revision ?? 0));
+  if (!newer.length) return base;
+  const grants = [...base.grants.filter(g => !newer.some(n => n.id === g.id)), ...newer];
+  return { ...base, grants,
+    events: base.events.map(e => { const latest = incoming.events.find(n => n.id === e.id); return latest && latest.revision > e.revision && latest.status === "revoked" ? latest : e; }),
+    briefs: base.briefs.map(b => {
+      const grant = newer.find(g => g.patientId === b.patientId && g.recipientId === b.recipientId);
+      return grant && b.status === "confirmed" && (grant.status !== "active" || b.grantRevision !== grant.revision) ? { ...b, status: "draft", confirmedAt: null, revision: b.revision + 1 } : b;
+    }),
+  };
+}
+
 let toastTimer: number | undefined;
 
 export const useAppStore = create<AppState & Actions>((rawSet, get) => {
@@ -318,9 +336,15 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     if (patch.phase === "urgent_help" && demo.context.actorId === "may") activeEmergencyEpisodeId = currentEpisode(demo)?.id ?? null;
     rawSet({ ...patch, demo, activeEmergencyEpisodeId, ...projectLegacy(demo, activeEmergencyEpisodeId) });
   };
-  const savePersisted = (state: AppState) => {
+  const savePersisted = (state: AppState, preserveNewerGrants = true) => {
     if (typeof window === "undefined") return;
     try {
+      const stored = loadDemo(window.localStorage);
+      // A delayed preference/task write must never resurrect an older permission snapshot.
+      if (preserveNewerGrants && stored.ok && stored.value) {
+        const demo = mergeNewerPermissions(state.demo, stored.value);
+        if (demo !== state.demo) { set({ demo }); state = get(); }
+      }
       const results = [saveDemo(window.localStorage, state.demo), savePreferences(window.localStorage, { locale: state.locale, liteMode: state.liteMode, introComplete: state.introComplete }), setEmergencySession(window.sessionStorage, state.activeEmergencyEpisodeId)];
       const failed = results.find(r => !r.ok);
       rawSet({ persistenceError: failed && !failed.ok ? failed.code : null, ...(failed && state.toast ? { toast: translate("storage.memoryOnly", state.locale) } : {}) });
@@ -339,9 +363,22 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
   };
   return {
   ...world(),
+  syncFromStorage: () => {
+    if (typeof window === "undefined") return;
+    const loaded = loadDemo(window.localStorage);
+    if (loaded.ok && loaded.value) {
+      const local = get().demo;
+      // An unsuccessful save leaves valid local work in memory. Still accept newer revocations.
+      const demo = get().persistenceError ? mergeNewerPermissions(local, loaded.value) : loaded.value;
+      set({ demo: { ...demo, context: local.context }, selectedRecordId: null });
+    }
+    else if (!loaded.ok) set({ persistenceError: loaded.code });
+  },
+  setConsent: input => { get().syncFromStorage(); return applyCare(setConsent(get().demo, input)); },
+  revokeConsent: id => { get().syncFromStorage(); return applyCare(revokeConsent(get().demo, id)); },
   setAppointment: (id, slotId) => applyCare(setAppointment(get().demo, id, slotId)),
   cancelAppointment: id => applyCare(cancelAppointment(get().demo, id)),
-  createAccompanyTask: id => applyCare(createAccompanyTask(get().demo, id)),
+  createAccompanyTask: id => { get().syncFromStorage(); return applyCare(createAccompanyTask(get().demo, id)); },
   setDoseStatus: (id, status) => applyCare(setDoseStatus(get().demo, id, status)),
   scheduleFollowup: at => applyCare(scheduleFollowup(get().demo, get().demo.context.patientId, at)),
   cancelCareTask: id => applyCare(cancelTask(get().demo, id)),
@@ -410,6 +447,7 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     return { ok: true, value: undefined };
   },
   setPerspective: (actorId) => {
+    if (typeof window !== "undefined") { try { window.sessionStorage.setItem("caremate-v4-actor", actorId); } catch { /* memory state still works */ } }
     set({ demo: { ...get().demo, context: selectContext(get().demo, actorId) }, viewingPersonId: "michelle" });
     savePersisted(get());
   },
@@ -417,7 +455,8 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     const demo = createScenario(id);
     const activeEmergencyEpisodeId = id === "urgent-help" ? demo.episodes.find(e => e.disposition === "urgent")?.id ?? null : null;
     set({ ...world(), demo, locale: get().locale, liteMode: get().liteMode, introComplete: get().introComplete, activeEmergencyEpisodeId, hydrated: true });
-    savePersisted(get());
+    if (typeof window !== "undefined") { try { window.sessionStorage.setItem("caremate-v4-actor", demo.context.actorId); } catch { /* in-memory context remains authoritative */ } }
+    savePersisted(get(), false);
   },
   setScenarioClock: (at) => {
     if (!/(?:Z|[+-]\d\d:\d\d)$/.test(at) || !Number.isFinite(Date.parse(at))) return;
@@ -438,6 +477,9 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
       const loaded = loadDemo(window.localStorage);
       if (loaded.ok) demo = loaded.value ?? demo;
       else persistenceError = loaded.code;
+      const actor = window.sessionStorage.getItem("caremate-v4-actor");
+      if (actor === "may" || actor === "david") demo = { ...demo, context: selectContext(demo, actor) };
+      window.sessionStorage.setItem("caremate-v4-actor", demo.context.actorId);
       const prefs = loadPreferences(window.localStorage);
       if (prefs.ok) preferences = prefs.value ?? preferences;
       else persistenceError = prefs.code;
@@ -495,7 +537,8 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     const legacy = sceneWorld(id);
     const demo = applyLegacyPatch(createScenario("dizziness"), legacy);
     set({ ...legacy, demo, locale: get().locale, liteMode: get().liteMode, introComplete: get().introComplete, activeEmergencyEpisodeId: id === "urgent-help" ? currentEpisode(demo)?.id ?? null : null, hydrated: true });
-    savePersisted(get());
+    if (typeof window !== "undefined") { try { window.sessionStorage.setItem("caremate-v4-actor", demo.context.actorId); } catch { /* in-memory context remains authoritative */ } }
+    savePersisted(get(), false);
   },
   advanceClock: () => {
     const demo = get().demo;
@@ -757,15 +800,10 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     savePersisted(get());
   },
   stopSharing: () => {
-    set({ sharingStopped: true, consent: { canViewAppointments: false, canViewBp: false, canViewMedication: false } });
-    get().showToast(get().locale === "en" ? "Saved" : "已儲存");
-    savePersisted(get());
+    const grant = get().demo.grants.find(g => g.recipientId === "david");
+    if (grant) get().revokeConsent(grant.id);
   },
-  prepareMotherBrief: () => {
-    set({ motherBriefReady: true });
-    get().showToast(get().locale === "en" ? "Brief is ready" : "摘要已準備好");
-    savePersisted(get());
-  },
+  prepareMotherBrief: () => { set({ pendingPath: "/brief" }); },
   addAccompany: () => { get().createAccompanyTask("appt-gp"); },
   selectSlot: (selectedSlotId) => set({ selectedSlotId }),
   bookSlot: (id) => {

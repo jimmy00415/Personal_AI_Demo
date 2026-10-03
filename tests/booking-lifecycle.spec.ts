@@ -135,7 +135,8 @@ test("cancelled_appointment_has_safe_brief_print_and_today_recovery", async ({ p
 
 test("caregiver_shell_recovery_returns_to_manageable_May_appointment", async ({ page }) => {
   const demo = createScenario("caregiver-alert"); await start(page, demo);
-  await expect(page.getByTestId("shared-unavailable")).toBeVisible();
+  await expect(page.getByTestId("shared-view")).toBeVisible();
+  await expect(page.getByTestId("shared-appointment-appt-gp")).toHaveCount(0);
   await expect(page.getByTestId("book-confirm")).toHaveCount(0);
   expect((await snapshot(page)).appointments).toEqual(demo.appointments);
   await page.goto("/dev"); await page.getByTestId("perspective-may").click();

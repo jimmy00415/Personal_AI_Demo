@@ -123,15 +123,17 @@ test("follow-up declined does not create reminder", async ({ page }) => {
 test("family context does not expose unshared records or change the active actor", async ({ page }) => {
   await reset(page);
   await page.goto("/family");
-  await page.getByTestId("family-lai-wah").click();
-  await expect(page.getByTestId("shared-unavailable")).toBeVisible();
+  await page.getByTestId("sharing-manage").click();
+  await expect(page.getByTestId("sharing-page")).toBeVisible();
+  const before = await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!));
+  expect(before.context.actorId).toBe("may");
   await expect(page.getByTestId("prep-mother")).toHaveCount(0);
   await expect(page.getByTestId("accompany")).toHaveCount(0);
   await expect(page.locator("main")).not.toContainText("Amlodipine");
   await page.goto("/dev");
   await page.getByTestId("perspective-david").click();
   await page.goto("/health");
-  await expect(page.getByTestId("shared-unavailable")).toBeVisible();
+  await expect(page.getByTestId("shared-empty")).toBeVisible();
   await page.goto("/dev");
   await page.getByTestId("perspective-may").click();
   await page.goto("/health");
