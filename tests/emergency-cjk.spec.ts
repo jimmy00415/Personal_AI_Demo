@@ -70,15 +70,14 @@ test("urgent branch renders exact Traditional Chinese and a CJK system font", as
   expect(notoReady).toBeTruthy();
 });
 
-test("local HKBU proxy reports ready when a key is configured", async ({ page }) => {
+test("assistant describes finite local scope without network readiness probing", async ({ page }) => {
   await clearWorld(page);
-  const probe = await page.request.get("/api/ask");
-  const data = (await probe.json()) as { ok?: boolean };
-  if (!data.ok) {
-    test.skip(true, "HKBU_GENAI_API_KEY is not loaded in this server");
-  }
+  const requests: string[] = [];
+  page.on("request", request => requests.push(request.url()));
   await page.goto("/ask");
-  await expect(page.getByTestId("ask-llm-status")).toContainText("HKBU");
+  await expect(page.getByTestId("assistant-scope")).toContainText("本地示範");
+  expect(requests.filter(url => /\/api\//.test(url) || new URL(url).origin !== "http://127.0.0.1:3000")).toEqual([]);
+  await expect(page.getByTestId("chat-page")).not.toContainText("HKBU");
 });
 
 test("leaving emergency returns to Today without opening a routine summary", async ({ page }) => {

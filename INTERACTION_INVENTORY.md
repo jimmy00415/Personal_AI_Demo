@@ -14,7 +14,7 @@ Patient-facing actions and their real outcomes. Removed affordances are listed a
 | Ask | 確認並儲存 | Creates episode `ep-dizzy-16` once; toast 已加入健康紀錄 |
 | Ask | 更正內容 | Drops the superseded answers, shows a correction note, and asks onset once |
 | Ask | 準備就診摘要 | `/brief` |
-| Ask | Free text | On localhost with `HKBU_GENAI_API_KEY`, `/api/ask` talks to HKBU gpt-4.1. On GitHub Pages, scoped refusal only |
+| Ask | Free text | Finite local replies from current May context; unsupported inputs keep recording/question entrances. No external requests. |
 | Ask | Stray keystrokes | Answered locally with a clarifying line; no model call |
 | Ask | Model reply guards | A reply is replaced if it reads back the record packet, claims safety, or calls an UNKNOWN dose missed |
 | Ask | 重試 | Appears only after a failed model call; resends the same question without repeating it |
@@ -53,3 +53,4 @@ Patient-facing actions and their real outcomes. Removed affordances are listed a
 - 發送給醫生, 已致電, 診所已確認
 - Camera, microphone, and unimplemented share
 - Universal “今日暫時不需要做其他事情” footer
+| Help | Fixed physical/emotional input from assistant or check-in | Interrupts to `/help`, retains draft, static 999 information; no routine completion or contact |

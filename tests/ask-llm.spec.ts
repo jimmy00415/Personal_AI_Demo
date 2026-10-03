@@ -1,192 +1,27 @@
 import { expect, test } from "@playwright/test";
-import { askSystemPrompt, buildRecordPacket, classifyFreeText, sanitiseReply, withRetry } from "../src/lib/ask-llm";
-import { emptyAnswers } from "../src/lib/seed";
-import { OPENING_CLOCK } from "../src/lib/types";
-
-const packetInput = {
-  clock: OPENING_CLOCK,
-  answers: { ...emptyAnswers, urgent: "none" as const, onset: "just-now" as const, change: "worse" as const },
-  bpAverage: { systolic: 144, diastolic: 90 },
-  appointmentAt: "2026-09-22T14:30:00+08:00",
-  questions: [],
-};
-
-const packet = [
-  "Saved records for Michelle Chan / 陳美玲, 56:",
-  "Clock: 2026-09-16T08:45:00+08:00",
-  "BP this morning 151/94; 7-day average 144/90",
-  "Medicines: Amlodipine 5mg 19:00, Atorvastatin 20mg 21:00; allergy Penicillin (user-entered)",
-  "Labs 13 Sep: HbA1c 6.4%, LDL 2.7 mmol/L, creatinine 71 μmol/L",
-  "Appointment: 2026-09-22T14:30:00+08:00",
-].join("\n");
-
-test.describe("free-text classification", () => {
-  test("blank input is empty", () => {
-    expect(classifyFreeText("")).toBe("empty");
-    expect(classifyFreeText("   \n ")).toBe("empty");
-  });
-
-  test("stray keystrokes are unclear and never reach the model", () => {
-    expect(classifyFreeText("nh")).toBe("unclear");
-    expect(classifyFreeText("hi")).toBe("unclear");
-    expect(classifyFreeText("...")).toBe("unclear");
-  });
-
-  test("short Chinese and real words are questions", () => {
-    expect(classifyFreeText("大啊")).toBe("question");
-    expect(classifyFreeText("help")).toBe("question");
-    expect(classifyFreeText("今早頭暈同血壓高有無關係？")).toBe("question");
-  });
-
-  test("booking wording only routes to booking after the episode is saved", () => {
-    expect(classifyFreeText("我想改期覆診", { episodeSaved: true })).toBe("booking");
-    expect(classifyFreeText("book an earlier appointment", { episodeSaved: true })).toBe("booking");
-    expect(classifyFreeText("我想改期覆診", { episodeSaved: false })).toBe("question");
-  });
-});
-
-test.describe("system prompt", () => {
-  test("Traditional Chinese prompt forbids dumping records and demands short replies", () => {
-    const prompt = askSystemPrompt("zh-HK");
-    expect(prompt).toContain("不要逐項複述");
-    expect(prompt).toContain("最多三句");
-    expect(prompt).toContain("999");
-    expect(prompt).toContain("不要診斷");
-    expect(prompt).toContain("漏藥");
-    expect(prompt).not.toContain("简体");
-  });
-
-  test("English prompt carries the same limits", () => {
-    const prompt = askSystemPrompt("en");
-    expect(prompt).toMatch(/do not repeat/i);
-    expect(prompt).toMatch(/three sentences/i);
-    expect(prompt).toContain("999");
-    expect(prompt).toMatch(/do not diagnose/i);
-  });
-});
-
-test.describe("record packet", () => {
-  test("an unremembered dose is sent as unknown, never as a missed dose", () => {
-    const built = buildRecordPacket({ ...packetInput, answers: { ...packetInput.answers, medGap: "forgot" } });
-    expect(built).toContain("UNKNOWN");
-    expect(built).toMatch(/never describe it as missed/i);
-    expect(built).not.toMatch(/she (missed|skipped|forgot)/i);
-    expect(built).not.toMatch(/dose was (missed|skipped)|forgot to take/i);
-  });
-
-  test("a dose the user took but did not log is described that way", () => {
-    const built = buildRecordPacket({ ...packetInput, answers: { ...packetInput.answers, medGap: "taken-unlogged" } });
-    expect(built).toMatch(/taken/i);
-    expect(built).toMatch(/not logged/i);
-    expect(built).not.toMatch(/missed/i);
-  });
-
-  test("answers are spelled out instead of sent as raw codes", () => {
-    const built = buildRecordPacket(packetInput);
-    expect(built).not.toContain("just-now");
-    expect(built).not.toContain("medGap=");
-    expect(built).toMatch(/started just now/i);
-    expect(built).toMatch(/worse than earlier/i);
-  });
-
-  test("the packet carries only Michelle's own records", () => {
-    const built = buildRecordPacket(packetInput);
-    expect(built).toContain("151/94");
-    expect(built).toContain("144/90");
-    expect(built).toContain("Penicillin");
-    expect(built).not.toContain("陳麗華");
-    expect(built).not.toMatch(/Losartan|mother/i);
-  });
-});
-
-test.describe("retrying a flaky upstream", () => {
-  test("a first-try success is not repeated", async () => {
-    let calls = 0;
-    const value = await withRetry(async () => {
-      calls += 1;
-      return "ok";
-    });
-    expect(value).toBe("ok");
-    expect(calls).toBe(1);
-  });
-
-  test("one transient failure is absorbed", async () => {
-    let calls = 0;
-    const value = await withRetry(
-      async () => {
-        calls += 1;
-        if (calls === 1) throw new Error("hkbu_502");
-        return "second";
-      },
-      { attempts: 2, delayMs: 1 },
-    );
-    expect(value).toBe("second");
-    expect(calls).toBe(2);
-  });
-
-  test("a persistent failure still surfaces, without extra attempts", async () => {
-    let calls = 0;
-    await expect(
-      withRetry(
-        async () => {
-          calls += 1;
-          throw new Error("hkbu_502");
-        },
-        { attempts: 3, delayMs: 1 },
-      ),
-    ).rejects.toThrow("hkbu_502");
-    expect(calls).toBe(3);
-  });
-});
-
-test.describe("reply sanitising", () => {
-  test("a reply that reads back the record packet is replaced with a short answer", () => {
-    const dump = `${packet}\n請將以上資料帶給醫護人員。`;
-    const result = sanitiseReply(dump, { packet, locale: "zh-HK" });
-    expect(result.adjusted).toBe("record-dump");
-    expect(result.text).toContain("就診摘要");
-    expect(result.text.length).toBeLessThan(120);
-    expect(result.text).not.toContain("Atorvastatin");
-  });
-
-  test("a reply claiming the user is safe is replaced", () => {
-    const result = sanitiseReply("你現在很安全，已排除中風的可能。", { packet, locale: "zh-HK" });
-    expect(result.adjusted).toBe("unsafe-claim");
-    expect(result.text).not.toContain("已排除");
-    expect(result.text).toContain("999");
-  });
-
-  test("legitimate caution wording is left alone", () => {
-    const reply = "為安全起見，請今日聯絡醫護，並繼續記錄血壓。";
-    const result = sanitiseReply(reply, { packet, locale: "zh-HK" });
-    expect(result.adjusted).toBe("none");
-    expect(result.text).toBe(reply);
-  });
-
-  test("an over-long reply is trimmed to three sentences", () => {
-    const long = Array.from({ length: 9 }, (_, i) => `這是第${i + 1}句說明內容。`).join("");
-    const result = sanitiseReply(long, { packet, locale: "zh-HK" });
-    expect(result.adjusted).toBe("trimmed");
-    expect(result.text.split("。").filter(Boolean)).toHaveLength(3);
-  });
-
-  test("a reply calling an unknown dose a missed dose is replaced", () => {
-    const result = sanitiseReply("你今朝漏咗食藥，記得補食。", { packet, locale: "zh-HK", unknownDose: true });
-    expect(result.adjusted).toBe("unknown-dose");
-    expect(result.text).toContain("未確定");
-    expect(result.text).not.toContain("補食");
-  });
-
-  test("a reported non-dose is still allowed to be stated", () => {
-    const reply = "你表示當晚沒有服藥，請把這件事交給醫生評估。";
-    const result = sanitiseReply(reply, { packet, locale: "zh-HK", unknownDose: false });
-    expect(result.adjusted).toBe("none");
-    expect(result.text).toBe(reply);
-  });
-
-  test("an empty reply falls back to honest copy", () => {
-    const result = sanitiseReply("   ", { packet, locale: "zh-HK" });
-    expect(result.adjusted).toBe("empty");
-    expect(result.text.length).toBeGreaterThan(0);
-  });
-});
+import { getHelpDisposition, getLocalAssistantReply } from "../src/lib/ask-llm";
+import { createScenario } from "../src/lib/demo/scenarios";
+import { helpInputs } from "../src/lib/demo/fixtures";
+import type { LocalAssistantContext } from "../src/lib/demo/types";
+function context(): LocalAssistantContext { const d = createScenario("dizziness"); return { context: d.context, clock: d.clock, locale: "zh-HK", episode: d.episodes[0], records: d.healthRecords, reports: d.reports, memories: d.memories, medicationDoses: d.medicationDoses }; }
+const reply = (text: string, c = context()) => getLocalAssistantReply(text, c);
+test("blank input provides a local clarification", () => { expect(reply("  ").text.en).toContain("could not read"); });
+test("stray keystrokes are unsupported with a useful next step", () => { for (const t of ["nh", "hi", "..."]) { expect(reply(t).intent).toBe("unsupported"); expect(reply(t).nextAction).toBe("question"); } });
+test("short Chinese and words receive bounded local answers", () => { expect(reply("大啊").disposition).toBe("unsupported"); expect(reply("今早頭暈同血壓高有無關係？").intent).toBe("symptom"); });
+test("booking wording routes to booking only after the episode is saved", () => { const c = context(); expect(reply("我想改期覆診", c).nextPath).toBe("/brief"); c.episode!.saved = true; expect(reply("book an earlier appointment", c).nextPath).toBe("/book"); });
+test("Traditional Chinese scripts are short and bounded", () => { for (const text of ["report", "medicine", "dizzy", "safe", "unknown"]) { const r = reply(text); expect(r.text.zh.length).toBeLessThan(400); expect(r.text.zh).not.toMatch(/已排除|不用擔心|你現在很安全/); } });
+test("English scripts carry the same limits", () => { for (const text of ["report", "medicine", "dizzy", "safe", "unknown"]) { const r = reply(text); expect(r.text.en.length).toBeLessThan(400); expect(r.text.en).not.toMatch(/you are safe|ruled out|notified your doctor/i); } });
+test("an unremembered dose stays unknown", () => { const c = context(); c.episode!.answers.medGap = "forgot"; const r = reply("medicine", c); expect(r.text.en).toContain("unconfirmed"); expect(r.text.zh).toContain("未確定"); expect(r.text.en).not.toMatch(/you missed|you skipped|catch up/i); });
+test("a confirmed dose reads the current source record", () => { const c = context(); c.medicationDoses!.find(d => d.id === "dose-ator-14")!.status = "user_confirmed_taken"; expect(reply("14 medicine", c).text.en).toContain("confirmed taking"); });
+test("uncertainty and worsening are words rather than raw codes", () => { const c = context(); c.episode!.disposition = "worsening"; const r = reply("dizzy", c); expect(r.text.en).toMatch(/clinician/i); expect(r.text.en).not.toMatch(/medGap|just-now/); });
+test("David cannot receive May's private assistant details", () => { const c = context(); c.context = { actorId: "david", patientId: "may", perspective: "caregiver" }; for (const q of ["report", "medicine", "dizziness"]) { expect(reply(q,c).disposition).toBe("unsupported"); expect(reply(q,c).text.en).not.toMatch(/151|HbA1c|Atorvastatin|Penicillin/); } });
+test("a supported local request is deterministic without retry", () => { expect(reply("report")).toEqual(reply("report")); });
+test("unsupported input can be corrected into a supported request", () => { expect(reply("weather").disposition).toBe("unsupported"); expect(reply("report").intent).toBe("report"); });
+test("repeated unsupported input preserves honest alternatives", () => { for (let i = 0; i < 3; i++) expect(reply("weather").nextAction).toBe("question"); });
+test("report reply uses one fact and identifies imported source", () => { const r = reply("report"); expect(r.text.en).toContain("imported report"); expect(r.text.en).toContain("6.4"); expect(r.text.en).not.toContain("Atorvastatin"); expect(r.text.en).not.toContain("creatinine"); });
+test("a request for reassurance receives the 999 boundary", () => { expect(reply("am I safe?").text.en).toContain("999"); expect(reply("am I safe?").text.en).not.toMatch(/you are safe|ruled out/i); });
+test("legitimate caution preserves uncertain disposition", () => { const c = context(); c.episode!.disposition = "uncertain"; expect(reply("help",c).disposition).toBe("uncertain"); expect(reply("help",c).text.zh).not.toContain("安全"); });
+test("a very long unsupported request still has a short answer", () => { const r = reply("some unrelated words ".repeat(100)); expect(r.text.en.length).toBeLessThan(400); expect(r.text.zh.split("。").filter(Boolean).length).toBeLessThanOrEqual(3); });
+test("unknown medication cannot be changed by suggestive input", () => { const r = reply("14 medicine missed dose catch up"); expect(r.text.en).toContain("unconfirmed"); expect(r.text.en).not.toContain("catch up"); });
+test("reported non-dose can be stated from the current source", () => { const c = context(); c.medicationDoses!.find(d => d.id === "dose-ator-14")!.status = "user_reported_not_taken"; expect(reply("14 medicine",c).text.en).toContain("reported not taking"); });
+test("every finite branch returns nonempty localized text including fixed help", () => { for (const kind of ["emotional", "physical"] as const) for (const text of helpInputs[kind]) { expect(getHelpDisposition(text)).toBe(kind); expect(reply(text).nextPath).toBe("/help"); expect(reply(text).text.zh.length).toBeGreaterThan(0); expect(reply(text).text.en.length).toBeGreaterThan(0); } for (const text of ["", "unknown", "report", "medicine", "feeling low", "question", "dizzy", "book"]) { expect(reply(text).text.zh.length).toBeGreaterThan(0); expect(reply(text).text.en.length).toBeGreaterThan(0); } expect(getHelpDisposition("I do not want to hurt myself now")).toBeNull(); });

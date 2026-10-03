@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 test.describe.configure({ timeout: 60_000 });
 
@@ -8,20 +8,6 @@ async function clearWorld(page: Page) {
     localStorage.removeItem("caremate-v4-preferences");
     sessionStorage.removeItem("caremate-v4-emergency");
   });
-}
-
-/** Intercepts the local proxy so the demo tests never depend on the campus API. */
-async function mockAsk(page: Page, onPost: (route: Route, attempt: number) => Promise<void>) {
-  const state = { posts: 0 };
-  await page.route("**/api/ask", async (route) => {
-    if (route.request().method() === "GET") {
-      await route.fulfill({ json: { ok: true } });
-      return;
-    }
-    state.posts += 1;
-    await onPost(route, state.posts);
-  });
-  return state;
 }
 
 async function reachChange(page: Page) {
@@ -70,11 +56,8 @@ test("saying the dizziness is worse gets a spoken reply before the medication qu
   await expect(log).not.toContainText("安全");
 });
 
-test("stray keystrokes get a clarifying question and never reach the model", async ({ page }) => {
+test("stray keystrokes get a local clarifying question", async ({ page }) => {
   await clearWorld(page);
-  const calls = await mockAsk(page, async (route) => {
-    await route.fulfill({ json: { text: "should never be used" } });
-  });
   await reachSummary(page);
 
   await page.getByTestId("ask-input").fill("nh");
@@ -82,15 +65,11 @@ test("stray keystrokes get a clarifying question and never reach the model", asy
 
   await expect(page.getByTestId("chat-log")).toContainText("我未看懂");
   await expect(page.getByTestId("chat-log")).not.toContainText("暫時未能連到");
-  expect(calls.posts).toBe(0);
+
 });
 
-test("a model reply that reads back the records is replaced with a short answer", async ({ page }) => {
+test("a consultation question gets a short local answer without a record dump", async ({ page }) => {
   await clearWorld(page);
-  await mockAsk(page, async (route) => {
-    const body = route.request().postDataJSON() as { packet?: string };
-    await route.fulfill({ json: { text: `${body.packet ?? ""}\n請將以上資料帶給醫護人員。` } });
-  });
   await reachSummary(page);
 
   await page.getByTestId("ask-input").fill("我應該帶甚麼去見醫生？");
@@ -102,11 +81,8 @@ test("a model reply that reads back the records is replaced with a short answer"
   await expect(log).not.toContainText("HbA1c 6.4%");
 });
 
-test("a model reply turning an unknown dose into a missed dose is replaced", async ({ page }) => {
+test("the local reply keeps the current dose unknown", async ({ page }) => {
   await clearWorld(page);
-  await mockAsk(page, async (route) => {
-    await route.fulfill({ json: { text: "你今朝漏咗食藥，記得補食返。" } });
-  });
   await reachChange(page);
   await page.getByTestId("quick-reply-better").click();
   await page.getByTestId("quick-reply-forgot").click();
@@ -120,11 +96,8 @@ test("a model reply turning an unknown dose into a missed dose is replaced", asy
   await expect(log).not.toContainText("補食");
 });
 
-test("a model reply claiming safety is replaced with the 999 boundary", async ({ page }) => {
+test("a reassurance request receives the local 999 boundary", async ({ page }) => {
   await clearWorld(page);
-  await mockAsk(page, async (route) => {
-    await route.fulfill({ json: { text: "你現在很安全，已排除中風的可能，不用擔心。" } });
-  });
   await reachSummary(page);
 
   await page.getByTestId("ask-input").fill("我係唔係無事？");
@@ -136,29 +109,20 @@ test("a model reply claiming safety is replaced with the 999 boundary", async ({
   await expect(log).not.toContainText("不用擔心");
 });
 
-test("a failed model call can be retried without repeating the question", async ({ page }) => {
+test("unsupported input can be corrected without repeating the old question", async ({ page }) => {
   await clearWorld(page);
-  const calls = await mockAsk(page, async (route, attempt) => {
-    if (attempt === 1) {
-      await route.fulfill({ status: 502, json: { error: "upstream" } });
-      return;
-    }
-    await route.fulfill({ json: { text: "可以把今早的血壓和頭暈時間帶去，讓醫護判斷是否需要提早覆診。" } });
-  });
   await reachSummary(page);
-
+  await page.getByTestId("ask-input").fill("weather on Mars");
+  await page.getByTestId("ask-send").click();
+  await expect(page.getByTestId("chat-log")).toContainText("這個示範未能回答");
+  await expect(page.getByTestId("assistant-next")).toBeVisible();
   await page.getByTestId("ask-input").fill("我應該幾時聯絡醫生？");
   await page.getByTestId("ask-send").click();
-  await expect(page.getByTestId("chat-log")).toContainText("暫時未能連到");
-  await expect(page.getByTestId("ask-retry")).toBeVisible();
-
-  await page.getByTestId("ask-retry").click();
   const log = page.getByTestId("chat-log");
-  await expect(log).toContainText("提早覆診");
-  await expect(log).not.toContainText("暫時未能連到");
+  await expect(log).toContainText("就診摘要");
+  await expect(log.getByText("weather on Mars")).toHaveCount(1);
   await expect(log.getByText("我應該幾時聯絡醫生？")).toHaveCount(1);
   await expect(page.getByTestId("ask-retry")).toHaveCount(0);
-  expect(calls.posts).toBe(2);
 });
 
 test("the summary and brief never contradict the answers just given", async ({ page }) => {

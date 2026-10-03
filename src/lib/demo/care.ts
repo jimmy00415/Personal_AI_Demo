@@ -37,6 +37,7 @@ export function setDoseStatus(state: DemoState, doseId: string, status: DoseCorr
 }
 export function scheduleFollowup(state: DemoState, patientId: PatientId, at: string): ActionResult<DemoState> {
   if (!mayEdit(state, patientId)) return fail("patient-only");
+  if (state.episodes.filter(e => e.patientId === patientId).at(-1)?.disposition === "urgent") return fail("urgent-help-required");
   const time = future(state, at); if (!time.ok) return time;
   const prior = state.tasks.find(t => t.id === "task-morning" && t.patientId === patientId);
   if (prior?.scheduledAt === at && prior.status === "scheduled") return success(state);
@@ -81,6 +82,7 @@ export function completeCheckInTask(state: DemoState, taskId: string, checkInId:
   if (!task || task.kind !== "check-in") return fail("task-missing");
   if (!mayEdit(state, task.patientId)) return fail("patient-only");
   if (task.status === "cancelled") return fail("task-inactive");
+  if (state.episodes.filter(e => e.patientId === task.patientId).at(-1)?.disposition === "urgent") return fail("urgent-help-required");
   const checkIn = state.checkIns.find(c => c.id === checkInId && c.patientId === task.patientId);
   const evidence = task.completionHistory?.find(e => e.checkInId === checkInId) ?? (task.completionEvidence?.checkInId === checkInId ? task.completionEvidence : undefined);
   const correctingCompleted = !!evidence || task.status === "completed" && !task.completionEvidence && task.sourceRecordIds.includes(checkInId);

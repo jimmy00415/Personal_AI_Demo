@@ -1,23 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
 import { formatDate, formatTime } from "@/lib/clock";
 import { addMinutes } from "@/lib/clock";
-import { bpAverage, michelleAppt, symptomLine } from "@/lib/selectors";
+import { bpAverage, symptomLine } from "@/lib/selectors";
 import { Button } from "@/components/system";
-import { buildRecordPacket, classifyFreeText, sanitiseReply } from "@/lib/ask-llm";
+import { getLocalAssistantReply } from "@/lib/demo/local-assistant";
 import { EmergencyHelp } from "./EmergencyHelp";
-
-/** Only a locally running Next server can hold the HKBU key; a static export never has an API. */
-function canUseLocalLlm() {
-  if (typeof window === "undefined") return false;
-  if (process.env.NEXT_PUBLIC_STATIC_EXPORT === "true") return false;
-  const host = window.location.hostname;
-  return host === "localhost" || host === "127.0.0.1";
-}
 
 const urgentOpts = [
   { id: "chest-breath", key: "ask.u1" as const, urgent: true },
@@ -54,107 +46,32 @@ export function AskPage() {
   const saveSummary = useAppStore((s) => s.saveSummary);
   const editSummary = useAppStore((s) => s.editSummary);
   const sendFreeText = useAppStore((s) => s.sendFreeText);
-  const addChat = useAppStore((s) => s.addChat);
   const episodeSaved = useAppStore((s) => s.episodeSaved);
-  const questions = useAppStore((s) => s.questions);
-  const appointments = useAppStore((s) => s.appointments);
-  const removeMessage = useAppStore((s) => s.removeMessage);
-  const [draft, setDraft] = useState("");
+  const demo = useAppStore(s => s.demo);
+  const setDraft = useAppStore(s => s.setAssistantDraft);
+  const episode = demo.episodes.at(-1) ?? null;
+  const isRecheck = episode?.id.startsWith("episode-recheck-");
+  const symptomFlow = !!episode && (isRecheck || episode.sourceRecordIds.some(id => demo.healthRecords.some(r => r.id === id && r.kind === "symptom" && r.category === "body")));
+  const session = demo.assistantSessions.find(s => s.episodeId === episode?.id);
+  const draft = session?.draft ?? "";
+  const lastInput = session?.messages.filter(m => m.role === "user" && m.id.startsWith("u-free")).at(-1)?.text.en ?? "";
+  const reply = lastInput ? getLocalAssistantReply(lastInput, { context: demo.context, clock: demo.clock, locale, episode, records: demo.healthRecords, reports: demo.reports, memories: demo.memories, medicationDoses: demo.medicationDoses }) : null;
   const [why, setWhy] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [llm, setLlm] = useState<"unknown" | "on" | "off">(() => (canUseLocalLlm() ? "unknown" : "off"));
-  const [failed, setFailed] = useState<{ text: string; messageId: string } | null>(null);
   const avg = bpAverage();
-
-  useEffect(() => {
-    if (!canUseLocalLlm()) return;
-    let cancelled = false;
-    fetch("/api/ask")
-      .then((r) => r.json())
-      .then((data: { ok?: boolean }) => {
-        if (!cancelled) setLlm(data.ok ? "on" : "off");
-      })
-      .catch(() => {
-        if (!cancelled) setLlm("off");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const unknownDose = answers.medGap === "forgot" || answers.medGap === null;
-
-  function recordPacket() {
-    return buildRecordPacket({
-      clock,
-      answers,
-      bpAverage: avg,
-      appointmentAt: michelleAppt(appointments).at,
-      questions: questions.filter((q) => q.added).map((q) => q.text.zh),
-    });
-  }
-
-  /** Sends an already-visible question to the local model. Never adds the user's message itself. */
-  async function askModel(text: string) {
-    setBusy(true);
-    const packet = recordPacket();
-    try {
-      const history = messages.slice(-8).map((m) => ({
-        role: m.role,
-        content: locale === "en" ? m.text.en : m.text.zh,
-      }));
-      const res = await fetch("/api/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: text, locale, history, packet, unknownDose }),
-      });
-      if (!res.ok) throw new Error("upstream");
-      const data = (await res.json()) as { text?: string };
-      const clean = sanitiseReply(data.text ?? "", { packet, locale, unknownDose });
-      const messageId = addChat("assistant", { zh: clean.text, en: clean.text });
-      setFailed(clean.adjusted === "empty" ? { text, messageId } : null);
-    } catch {
-      const messageId = addChat("assistant", { zh: t("ask.llmFail"), en: t("ask.llmFail") });
-      setFailed({ text, messageId });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleFreeText(text: string) {
-    const trimmed = text.trim();
-    if (!trimmed || busy) return;
-    const kind = classifyFreeText(trimmed, { episodeSaved });
-    if (kind !== "question" || !canUseLocalLlm() || llm !== "on") {
-      sendFreeText(trimmed);
-      return;
-    }
-    setFailed(null);
-    addChat("user", { zh: trimmed, en: trimmed });
-    await askModel(trimmed);
-  }
-
-  async function retryFreeText() {
-    if (!failed || busy) return;
-    const { text, messageId } = failed;
-    removeMessage(messageId);
-    setFailed(null);
-    await askModel(text);
-  }
 
   if (step === "urgent_help") {
     return <EmergencyHelp />;
   }
 
-  const options =
+  const options = !symptomFlow ? [] :
     step === "urgent" ? urgentOpts : step === "onset" ? onsetOpts : step === "change" ? changeOpts : step === "med_gap" ? medOpts : [];
 
   return (
     <div data-testid="chat-page" className="mx-auto max-w-2xl">
       <header className="mb-6">
-        <h1 className="text-[28px] leading-tight">{t("ask.title")}</h1>
+        <h1 className="text-[28px] leading-tight">{t(isRecheck ? "local.recheck" : symptomFlow ? "ask.title" : "local.assistantTitle")}</h1>
         <p className="mt-1 text-[15px] text-ink-muted">{t("ask.person")}</p>
-        <p className="mt-2 text-[14px] text-ink-soft">{t("ask.context")}</p>
+        {symptomFlow && !isRecheck ? <p className="mt-2 text-[14px] text-ink-soft">{t("ask.context")}</p> : null}
       </header>
 
       <div className="space-y-5">
@@ -177,7 +94,7 @@ export function AskPage() {
           ))}
         </div>
 
-        {step === "urgent" ? (
+        {symptomFlow && step === "urgent" ? (
           <div>
             <p className="text-[17px]">{t("ask.urgentQ")}</p>
             <button type="button" className="mt-2 text-[13px] text-ink-soft" onClick={() => setWhy((v) => !v)}>
@@ -280,31 +197,29 @@ export function AskPage() {
         onSubmit={(e) => {
           e.preventDefault();
           const text = draft;
-          setDraft("");
-          void handleFreeText(text);
+          sendFreeText(text);
         }}
       >
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={busy ? t("ask.thinking") : t("ask.placeholder")}
-          disabled={busy}
+          placeholder={t("ask.placeholder")}
+          aria-label={t("ask.placeholder")}
           data-testid="ask-input"
-          className="min-h-12 flex-1 rounded-[12px] bg-surface-secondary px-3 outline-none"
+          className="min-h-12 min-w-0 flex-1 rounded-[12px] bg-surface-secondary px-3 outline-none"
         />
-        <Button type="submit" data-testid="ask-send" disabled={busy}>
+        <Button type="submit" data-testid="ask-send">
           {t("ask.send")}
         </Button>
       </form>
-      {failed ? (
-        <Button variant="secondary" data-testid="ask-retry" className="mt-3" onClick={() => void retryFreeText()}>
-          {t("ask.retry")}
-        </Button>
-      ) : null}
-      <p className="mt-3 text-[13px] text-ink-soft" data-testid="ask-llm-status">
-        {llm === "on" ? t("ask.llmOn") : canUseLocalLlm() && llm === "off" ? t("ask.llmOff") : t("ask.boundary")}
-      </p>
-      {llm === "on" ? <p className="mt-1 text-[13px] text-ink-soft">{t("ask.boundary")}</p> : null}
+      <div className="mt-4 flex flex-wrap gap-3" aria-live="polite">
+        {reply?.nextPath ? <Link data-testid="assistant-next" className="inline-flex min-h-11 items-center text-brand underline" href={reply.intent === "mood" ? "/brief" : reply.nextPath}>{t(reply.intent === "mood" ? "checkin.organise" : reply.nextPath === "/report" ? "nav.health" : reply.nextPath === "/care" ? "nav.follow" : reply.nextAction === "check-in" ? "checkin.title" : reply.nextAction === "question" ? "local.question" : "ask.prep")}</Link> : null}
+        {reply?.intent === "mood" ? <Link data-testid="assistant-record-only" className="inline-flex min-h-11 items-center text-brand underline" href="/check-in">{t("local.record")}</Link> : null}
+        <Link className="inline-flex min-h-11 items-center text-brand underline" href="/health">{t("nav.health")}</Link>
+      </div>
+      <p className="mt-3 text-[14px] text-ink-muted" data-testid="assistant-scope">{t("local.scope")}</p>
+      <p className="mt-2 text-[14px] text-ink-muted">{t("local.helpScope")}</p>
+      <p className="mt-2 text-[14px] text-ink-muted">{t("ask.boundary")}</p>
     </div>
   );
 }

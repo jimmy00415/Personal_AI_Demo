@@ -69,6 +69,8 @@ export function AboutPage() {
       <h1 className="text-[30px]">{t("about.title")}</h1>
       <p className="measure mt-4 text-[17px] leading-relaxed">{t("about.body")}</p>
       <p className="measure mt-4 text-ink-muted">{t("about.limit")}</p>
+      <p className="measure mt-4">{t("local.scope")}</p>
+      <p className="measure mt-4">{t("local.helpScope")}</p>
     </div>
   );
 }

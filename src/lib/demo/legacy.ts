@@ -75,7 +75,7 @@ export function applyLegacyPatch(demo: DemoState, patch: Partial<AppState>): Dem
     if (patch.phase) e.phase = patch.phase;
     if (patch.episodeSaved !== undefined) e.saved = patch.episodeSaved;
     if (patch.followup) e.followup = patch.followup;
-    e.disposition = e.answers.urgent && !["none", "unsure"].includes(e.answers.urgent) ? "urgent" : e.answers.urgent === "unsure" ? "uncertain" : e.answers.change === "worse" ? "worsening" : e.saved ? "ordinary" : "open";
+    if (patch.answers || patch.episodeSaved !== undefined) e.disposition = e.answers.urgent && !["none", "unsure"].includes(e.answers.urgent) ? "urgent" : e.answers.urgent === "unsure" ? "uncertain" : e.answers.nextMorning === "worse" ? "worsening" : e.answers.nextMorning === "still" ? "uncertain" : e.answers.change === "worse" ? "worsening" : e.answers.change === "unclear" ? "uncertain" : e.saved ? "ordinary" : "open";
     const updatedEpisode = revised(prior, e);
     next.episodes = prior ? next.episodes.map(old => old.id === e.id ? updatedEpisode : old) : [...next.episodes, updatedEpisode];
     if (patch.messages) {

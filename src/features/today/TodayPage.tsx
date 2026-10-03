@@ -28,7 +28,8 @@ export function TodayPage() {
   const dailyEntry = todayView.dailyEntry;
   const [why, setWhy] = useState(false);
   const legacyHero = todayHero(clock, episodeSaved, answers.nextMorning, bookingStatus, phase);
-  const hero = todayView.hero.kind === "urgent" ? { kind: "urgent", titleKey: "today.heroUrgent", bodyKey: "today.heroUrgentBody" } as const
+  const emotionalHelp = demo.episodes.find(e => e.id === todayView.hero.sourceId)?.helpKind === "emotional";
+  const hero = todayView.hero.kind === "urgent" ? { kind: "urgent", titleKey: emotionalHelp ? "local.emotionalTitle" : "today.heroUrgent", bodyKey: emotionalHelp ? "local.emotionalBody" : "today.heroUrgentBody" } as const
     : todayView.hero.kind === "needs-attention" ? { kind: "attention", titleKey: "today.attentionTitle", bodyKey: "today.attentionBody" } as const
       : todayView.hero.kind === "follow-up" ? { kind: "next", titleKey: "today.heroNext", bodyKey: "today.heroNextBody" } as const
         : todayView.hero.kind === "prepare-visit" ? { kind: "prepare", titleKey: "today.prepareTitle", bodyKey: "today.prepareBody" } as const
@@ -50,7 +51,7 @@ export function TodayPage() {
         {hero.kind === "urgent" ? (
           <div className="mt-6">
             <Link
-              href="/ask"
+              href="/help"
               data-testid="return-emergency"
               className="inline-flex min-h-12 items-center rounded-[10px] bg-critical px-4 text-[16px] text-white"
             >

@@ -40,6 +40,7 @@ export interface HealthRecord extends PatientEntity {
   supersededByRecordId?: string;
 }
 export interface HealthEpisode extends PatientEntity {
+  helpKind?: "physical" | "emotional";
   answers: Answers;
   step: ChatStep;
   disposition: "open" | "ordinary" | "uncertain" | "worsening" | "urgent";
@@ -180,6 +181,7 @@ export interface SharingProjection {
   briefs: BriefPacket[];
 }
 export interface LocalAssistantContext {
+  medicationDoses?: MedicationDose[];
   context: DemoContext; clock: string; locale: Locale; episode: HealthEpisode | null; records: HealthRecord[]; memories: MemoryItem[]; reports: ImportedReport[];
 }
 export interface LocalAssistantReply {

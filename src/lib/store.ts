@@ -23,7 +23,7 @@ import type {
   SceneId,
 } from "./types";
 import { messages, translate, type MessageKey } from "./i18n";
-import { classifyFreeText } from "./ask-llm";
+import { ensureAssistantSession, getHelpDisposition, getLocalAssistantReply, interruptForHelp } from "./demo/local-assistant";
 import { symptomLine } from "./selectors";
 import { NEXT_CLOCK, OPENING_CLOCK } from "./types";
 import type { ActionResult, ActorId, CheckInDraft, DemoState, Observation, ScenarioId } from "./demo/types";
@@ -123,6 +123,8 @@ interface Actions {
   editSummary: () => void;
   saveSummary: () => void;
   sendFreeText: (text: string) => void;
+  setAssistantDraft: (text: string) => void;
+  requestHelp: (kind: "physical" | "emotional") => void;
   addChat: (role: ChatMessage["role"], text: ChatMessage["text"]) => string;
   removeMessage: (id: string) => void;
   toggleQuestion: (id: string) => void;
@@ -398,6 +400,9 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     const demo = get().demo;
     const draft = demo.drafts.find(d => d.id === id);
     if (!draft) return demo.checkIns.some(r => r.draftId === id) ? { ok: true, value: undefined } : { ok: false, code: "DraftMissing" };
+    const helpKind = getHelpDisposition(draft.note);
+    if (helpKind) { get().requestHelp(helpKind); return { ok: false, code: "help-required" }; }
+    if (get().activeEmergencyEpisodeId) return { ok: false, code: "help-required" };
     if (draft.taskId && draft.step !== "review") return { ok: false, code: "review-required" };
     const result = commitCheckIn(demo, draft);
     if (!result.ok) return result;
@@ -451,7 +456,7 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
       const episode = currentEpisode(demo);
       if (!activeEmergencyEpisodeId && episode?.disposition === "urgent") {
         const id = `episode-recheck-${demo.episodes.length + 1}`;
-        demo = { ...demo, episodes: [...demo.episodes, { ...episode, id, answers: { ...emptyAnswers }, disposition: "open", step: "urgent", phase: "concern_open", saved: false, followup: "none", revision: 1 }], assistantSessions: [...demo.assistantSessions, { id: `session-${id}`, patientId: "may", episodeId: id, messages: world().messages, status: "active", draft: "" }] };
+        demo = { ...demo, episodes: [...demo.episodes, { ...episode, id, helpKind: undefined, answers: { ...emptyAnswers }, disposition: "open", step: "urgent", phase: "concern_open", saved: false, followup: "none", revision: 1 }], assistantSessions: [...demo.assistantSessions, { id: `session-${id}`, patientId: "may", episodeId: id, messages: [{ id: "recheck", role: "assistant", text: say("local.recheckBody") }], status: "active", draft: "" }] };
       }
     } catch (error) { persistenceError = error instanceof Error ? error.name : "StorageUnavailable"; }
     set({ demo, ...preferences, activeEmergencyEpisodeId, persistenceError, toast: null, pendingPath: null, hydrated: true });
@@ -512,6 +517,7 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
   openAsk: () => set({ pendingPath: "/ask" }),
   answer: (id) => {
     const s = get();
+    if (s.demo.context.actorId !== "may" || s.activeEmergencyEpisodeId) return;
     const said = (): ChatMessage[] => [...s.messages, { id: chatId(`u-${id}`), role: "user", text: labelOf(id) }];
 
     if (s.step === "urgent") {
@@ -521,7 +527,7 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
           step: "urgent_help",
           phase: "urgent_help",
           messages: said(),
-          pendingPath: "/ask",
+          pendingPath: "/help",
         });
         savePersisted(get());
         return;
@@ -561,6 +567,11 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
 
     if (s.step === "change") {
       if (!CHANGE_IDS.includes(id)) return;
+      if (id === "unclear") {
+        set({ answers: { ...s.answers, change: "unclear" }, step: "uncertain", phase: "uncertain", messages: [...said(), { id: chatId("a-unclear"), role: "assistant", text: say("ask.uncertain") }] });
+        savePersisted(get());
+        return;
+      }
       if (id === "worse") {
         set({
           answers: { ...s.answers, change: "worse" },
@@ -604,6 +615,7 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
   },
   editSummary: () => {
     const s = get();
+    if (s.demo.context.actorId !== "may" || s.activeEmergencyEpisodeId) return;
     const asked = s.messages.findIndex((m) => m.id.startsWith(ONSET_QUESTION_ID));
     const kept = asked === -1 ? s.messages : s.messages.slice(0, asked);
     set({
@@ -615,6 +627,7 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     savePersisted(get());
   },
   saveSummary: () => {
+    if (get().demo.context.actorId !== "may" || get().activeEmergencyEpisodeId || ["urgent", "uncertain"].includes(currentEpisode(get().demo)?.disposition ?? "") || get().step !== "summary" && get().step !== "saved") return;
     if (get().episodeSaved) {
       get().showToast(get().locale === "en" ? "Already saved" : "已加入健康紀錄");
       return;
@@ -674,24 +687,29 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     set({ messages: get().messages.filter((m) => m.id !== id) });
     savePersisted(get());
   },
-  sendFreeText: (text) => {
+  setAssistantDraft: text => {
+    const demo = ensureAssistantSession(get().demo);
+    if (demo.context.actorId !== "may") return;
+    const id = currentEpisode(demo)!.id;
+    set({ demo: { ...demo, assistantSessions: demo.assistantSessions.map(s => s.episodeId === id ? { ...s, draft: text } : s) } });
+    savePersisted(get());
+  },
+  requestHelp: kind => {
+    if (get().demo.context.actorId !== "may") return;
+    const demo = interruptForHelp(get().demo, kind);
+    set({ demo, activeEmergencyEpisodeId: currentEpisode(demo)!.id, pendingPath: "/help", toast: null });
+    savePersisted(get());
+  },
+  sendFreeText: text => {
     const trimmed = text.trim();
-    const kind = classifyFreeText(trimmed, { episodeSaved: get().episodeSaved });
-    if (kind === "empty") return;
-    const reply: Localized =
-      kind === "booking"
-        ? say("ask.freeBooking")
-        : kind === "unclear"
-          ? say("ask.unclear")
-          : say("ask.freeNoAnswer");
-    set({
-      messages: [
-        ...get().messages,
-        { id: chatId("u-free"), role: "user", text: { zh: trimmed, en: trimmed } },
-        { id: chatId("a-free"), role: "assistant", text: reply },
-      ],
-    });
-    if (kind === "booking") set({ pendingPath: "/book" });
+    if (!trimmed || get().demo.context.actorId !== "may") return;
+    const demo = ensureAssistantSession(get().demo);
+    const episode = currentEpisode(demo)!;
+    const reply = getLocalAssistantReply(trimmed, { context: demo.context, clock: demo.clock, locale: get().locale, episode, records: demo.healthRecords, memories: demo.memories, reports: demo.reports, medicationDoses: demo.medicationDoses });
+    const withMessages: DemoState = { ...demo, assistantSessions: demo.assistantSessions.map(s => s.episodeId === episode.id ? { ...s, draft: reply.disposition === "urgent" ? trimmed : "", messages: [...s.messages, { id: chatId("u-free"), role: "user", text: { zh: trimmed, en: trimmed } }, { id: chatId("a-free"), role: "assistant", text: reply.text }] } : s) };
+    if (reply.disposition === "urgent") {
+      set({ demo: interruptForHelp(withMessages, getHelpDisposition(trimmed) ?? episode.helpKind ?? "physical"), activeEmergencyEpisodeId: episode.id, pendingPath: "/help", toast: null });
+    } else set({ demo: withMessages, ...(reply.intent === "booking" && reply.nextPath === "/book" ? { pendingPath: reply.nextPath } : {}) });
     savePersisted(get());
   },
   toggleQuestion: (id) => {

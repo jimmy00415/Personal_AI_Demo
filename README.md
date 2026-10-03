@@ -23,20 +23,11 @@ npm run test
 
 Do not record from the development server.
 
-## Local HKBU chat (optional)
+## Local scripted assistant
 
-GitHub Pages cannot hold the API key. For the simplest live demo, run the Next server on this machine:
+All assistant replies are finite local scripts in `src/lib/demo/local-assistant.ts`. There is no API readiness probe, remote model, or external service request. Unknown inputs offer recording, saved information, or consultation questions. The demo permits free task exploration, not unrestricted AI conversation.
 
-```powershell
-$env:HKBU_GENAI_API_KEY = [Environment]::GetEnvironmentVariable("HKBU_GENAI_API_KEY","User")
-npm run dev
-```
-
-Then open http://localhost:3000/ask and type in the box. The key stays in the server environment; the browser only calls `/api/ask`.
-
-You can also put the key in `.env.local` (gitignored) and just run `npm run dev`.
-
-The campus endpoint rejects occasional calls. `/api/ask` retries once, and the screen shows a **重試** button if the call still fails, so a recording can recover without retyping. Replies pass through `src/lib/ask-llm.ts`, which shortens them to three sentences and replaces any reply that reads the record list back, claims the user is safe, or calls the unconfirmed 14 September dose a missed dose.
+The fixed emotional help examples include “我現在想傷害自己” and “I want to hurt myself now”; all supported equivalents are listed in `demo/fixtures.ts`. The same helper handles assistant and check-in input. Drafts survive help interruption; same-tab reload retains active help and a fresh session rechecks current status. This bounded demonstration does not detect every dangerous expression. The static 999 guidance makes no call or message.
 
 ## GitHub Pages
 
@@ -65,7 +56,8 @@ Recording should still use `npm run build` / `npm start` without `GITHUB_PAGES`,
 | Route | Screen |
 | --- | --- |
 | `/` | Today — one next action from the scenario clock |
-| `/ask` | Dizziness check-in (urgent → onset → change → medication gap → summary) |
+| `/help` | Physical or emotional help; no external contact |
+| `/ask` | Local finite assistant and dizziness check-in (urgent → onset → change → medication gap → summary) |
 | `/health` | Overview / 健康紀錄 / 血壓與量度 / 報告 |
 | `/care` | 跟進 |
 | `/brief` | Consultation brief, clipboard, print, follow-up |
@@ -84,7 +76,7 @@ Recording should still use `npm run build` / `npm start` without `GITHUB_PAGES`,
 
 - Clock: `2026-09-16T08:45+08:00` in `src/lib/types.ts` (`OPENING_CLOCK`)
 - Fixtures: `src/lib/seed.ts`
-- Transitions: `src/lib/store.ts` (namespaced `localStorage` key `caremate-v3`)
+- Transitions: `src/lib/store.ts` (namespaced `localStorage` key `caremate-v4`)
 - Copy: `src/lib/i18n.ts`
 - Tokens: `src/app/globals.css`
 

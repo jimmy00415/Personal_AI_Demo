@@ -17,7 +17,7 @@ export function samePath(a: string | null | undefined, b: string | null | undefi
 export function shellLayout(rawPathname: string | null | undefined, emergency: boolean) {
   const pathname = normalizePath(rawPathname);
   const bare = pathname === "/print";
-  const hideChrome = (emergency && pathname === "/ask") || bare || pathname === "/dev";
+  const hideChrome = (emergency && pathname === "/ask") || pathname === "/help" || bare || pathname === "/dev";
   return {
     pathname,
     bare,
