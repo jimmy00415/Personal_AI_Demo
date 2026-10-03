@@ -1,4 +1,5 @@
-import { averageBp, appointments, bpReadings, michelleMeds, report, currentDemo } from "./seed";
+import { appointments, bpReadings, michelleMeds, report, currentDemo } from "./seed";
+import { selectBpAverage } from "./demo/selectors";
 import { formatDateTime, formatShortDate, formatTime } from "./clock";
 import type { Answers, Appointment, BookingStatus, JourneyPhase } from "./types";
 import type { Locale, Localized } from "./types";
@@ -14,7 +15,8 @@ export function motherBp() {
 }
 
 export function bpAverage() {
-  return averageBp(michelleBp());
+  const state = currentDemo();
+  return state.context.actorId === "may" ? selectBpAverage(state) ?? { systolic: 0, diastolic: 0 } : { systolic: 0, diastolic: 0 };
 }
 
 export function latestMichelleBp() {

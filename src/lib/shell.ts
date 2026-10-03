@@ -22,7 +22,7 @@ export function shellLayout(rawPathname: string | null | undefined, emergency: b
     pathname,
     bare,
     hideChrome,
-    hideFab: hideChrome || pathname === "/ask" || pathname === "/book",
+    hideFab: hideChrome || pathname === "/ask" || pathname === "/book" || pathname === "/check-in",
     showAskLink: pathname !== "/ask",
     isActive: (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href)),
   };

@@ -1,5 +1,14 @@
 import { clockParts } from "../clock";
-import type { ActorId, DemoContext, DemoState, TodayView } from "./types";
+import type { ActorId, DemoContext, DemoState, PatientId, TodayView } from "./types";
+
+export function selectObservations(state: DemoState, patientId: PatientId = state.context.patientId) {
+  return state.observations.filter(r => r.patientId === patientId).toSorted((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt));
+}
+export function selectBpAverage(state: DemoState, patientId: PatientId = state.context.patientId) {
+  const start = Date.parse(`${clockParts(state.clock).dateKey}T00:00:00+08:00`) - 6 * 86400000;
+  const readings = selectObservations(state, patientId).filter(r => Date.parse(r.occurredAt) >= start && Date.parse(r.occurredAt) <= Date.parse(state.clock));
+  return readings.length ? { systolic: Math.round(readings.reduce((sum, r) => sum + r.systolic, 0) / readings.length), diastolic: Math.round(readings.reduce((sum, r) => sum + r.diastolic, 0) / readings.length) } : null;
+}
 
 export function selectContext(state: DemoState, actorId: ActorId): DemoContext {
   return { actorId, patientId: state.context.patientId, perspective: actorId === "may" ? "patient" : "caregiver" };

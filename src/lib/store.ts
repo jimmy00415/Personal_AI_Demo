@@ -26,7 +26,8 @@ import { messages, translate, type MessageKey } from "./i18n";
 import { classifyFreeText } from "./ask-llm";
 import { symptomLine } from "./selectors";
 import { NEXT_CLOCK, OPENING_CLOCK } from "./types";
-import type { ActorId, DemoState, ScenarioId } from "./demo/types";
+import type { ActionResult, ActorId, CheckInDraft, DemoState, Observation, ScenarioId } from "./demo/types";
+import { createCheckInDraft, updateCheckInDraft, commitCheckIn, saveObservation } from "./demo/check-in";
 import { createScenario } from "./demo/scenarios";
 import { loadDemo, saveDemo, loadPreferences, savePreferences, getEmergencySession, setEmergencySession } from "./demo/persistence";
 import { selectContext } from "./demo/selectors";
@@ -79,6 +80,11 @@ export interface AppState {
 }
 
 interface Actions {
+  beginCheckIn: () => void;
+  editCheckIn: (id: string) => void;
+  patchCheckIn: (id: string, patch: Partial<Pick<CheckInDraft, "mood" | "body" | "note" | "step">>) => void;
+  saveCheckIn: (id: string) => ActionResult<void>;
+  saveObservation: (observation: Observation) => ActionResult<void>;
   setPerspective: (actorId: ActorId) => void;
   applyScenario: (id: ScenarioId) => void;
   setScenarioClock: (at: string) => void;
@@ -327,6 +333,46 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
   };
   return {
   ...world(),
+  beginCheckIn: () => {
+    const demo = get().demo;
+    if (demo.context.actorId !== "may") return;
+    const draft = createCheckInDraft(demo, demo.context.patientId);
+    if (demo.drafts.some(d => d.id === draft.id)) return;
+    set({ demo: { ...demo, drafts: [...demo.drafts, draft] } });
+    savePersisted(get());
+  },
+  editCheckIn: (id) => {
+    const demo = get().demo;
+    const record = demo.checkIns.find(r => r.id === id && r.patientId === demo.context.patientId);
+    if (!record || demo.context.actorId !== "may") return;
+    const draft: CheckInDraft = { id: record.draftId, patientId: record.patientId, occurredAt: record.occurredAt, mood: record.mood, body: record.body, note: record.note, step: "mood", taskId: null, revision: record.revision };
+    set({ demo: { ...demo, drafts: [...demo.drafts.filter(d => d.id !== draft.id), draft] }, selectedRecordId: null });
+    savePersisted(get());
+  },
+  patchCheckIn: (id, patch) => {
+    const demo = get().demo;
+    if (demo.context.actorId !== "may") return;
+    const { step, ...content } = patch;
+    set({ demo: { ...demo, drafts: demo.drafts.map(d => d.id === id ? { ...updateCheckInDraft(d, content), ...(step ? { step } : {}) } : d) } });
+    savePersisted(get());
+  },
+  saveCheckIn: (id) => {
+    const demo = get().demo;
+    const draft = demo.drafts.find(d => d.id === id);
+    if (!draft) return demo.checkIns.some(r => r.draftId === id) ? { ok: true, value: undefined } : { ok: false, code: "DraftMissing" };
+    const result = commitCheckIn(demo, draft);
+    if (!result.ok) return result;
+    set({ demo: result.value });
+    savePersisted(get());
+    return { ok: true, value: undefined };
+  },
+  saveObservation: (observation) => {
+    const result = saveObservation(get().demo, observation);
+    if (!result.ok) return result;
+    set({ demo: result.value });
+    savePersisted(get());
+    return { ok: true, value: undefined };
+  },
   setPerspective: (actorId) => {
     set({ demo: { ...get().demo, context: selectContext(get().demo, actorId) }, viewingPersonId: "michelle" });
     savePersisted(get());

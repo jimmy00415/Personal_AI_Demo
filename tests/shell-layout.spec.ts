@@ -45,6 +45,12 @@ test.describe("shell layout", () => {
     expect(layout.showAskLink).toBeTruthy();
   });
 
+  test("daily check-in hides the floating Ask button while keeping return navigation", () => {
+    const layout = shellLayout("/check-in/", false);
+    expect(layout.hideChrome).toBeFalsy();
+    expect(layout.hideFab).toBeTruthy();
+  });
+
   test("active navigation works with and without the slash", () => {
     expect(shellLayout("/health/", false).isActive("/health")).toBeTruthy();
     expect(shellLayout("/family/lai-wah/", false).isActive("/family")).toBeTruthy();

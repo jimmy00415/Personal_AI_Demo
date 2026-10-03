@@ -9,6 +9,7 @@ import { useI18n } from "@/lib/use-i18n";
 import { formatDate, formatDateTime } from "@/lib/clock";
 import { michelleAppt, todayHero } from "@/lib/selectors";
 import { Button, GroupedList, ListRow } from "@/components/system";
+import { selectToday } from "@/lib/demo/selectors";
 
 export function TodayPage() {
   const router = useRouter();
@@ -24,6 +25,8 @@ export function TodayPage() {
   const phase = useAppStore((s) => s.phase);
   const appointments = useAppStore((s) => s.appointments);
   const setHealthTab = useAppStore((s) => s.setHealthTab);
+  const demo = useAppStore((s) => s.demo);
+  const dailyEntry = selectToday(demo).dailyEntry;
   const [why, setWhy] = useState(false);
   const hero = todayHero(clock, episodeSaved, answers.nextMorning, bookingStatus, phase);
   const appt = michelleAppt(appointments);
@@ -127,6 +130,12 @@ export function TodayPage() {
             ) : null}
           </div>
         ) : null}
+      </section>
+
+      <section className="mt-8">
+        <Link href={dailyEntry.href} data-testid="daily-check-in" className="inline-flex min-h-11 items-center rounded-[10px] bg-surface-secondary px-4 py-3 text-[17px] text-brand">
+          {t("checkin.title")}
+        </Link>
       </section>
 
       <section className="mt-10">
