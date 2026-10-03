@@ -33,6 +33,7 @@ export const messages = {
   "packet.unavailable": { zh: "目前授權不允許匯出這份資料。", en: "Current permission does not allow this brief to be exported." },
   "packet.copyFailed": { zh: "未能複製。請選取以下文字並手動複製。", en: "Could not copy. Select the text below and copy it manually." },
   "packet.selectText": { zh: "選取全部文字", en: "Select all text" },
+  "packet.previewUpdated": { zh: "預覽已更新。請核對目前內容，再打開系統打印畫面。", en: "Preview updated. Review the current content, then open the system print dialog again." },
   "packet.preview": { zh: "打印預覽", en: "Print preview" },
   "packet.openPrint": { zh: "打開系統打印畫面", en: "Open system print dialog" },
   "packet.local": { zh: "虛構資料・只供本地交接，未發送給醫生或家人。已匯出的內容無法收回。", en: "Fictional data for local handoff only; nothing sent to a clinician or family. Exported copies cannot be recalled." },

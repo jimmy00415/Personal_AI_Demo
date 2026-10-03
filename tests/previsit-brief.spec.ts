@@ -328,3 +328,59 @@ test("day-before generation preserves earlier personal review supplements as a n
   expect(briefToText(next.briefs[1], "en")).toContain("Keep earlier supplement");
   expect(ensurePrevisitDraft(next, "appt-gp").briefs).toHaveLength(2);
 });
+
+async function interceptPrint(page: Page) {
+  await page.evaluate(() => {
+    const captures: (string | null)[] = [];
+    Object.assign(window, { printCaptures: captures });
+    window.print = () => { captures.push(document.querySelector('[data-testid="print-packet"]')?.textContent ?? null); };
+  });
+}
+const printCaptures = (page: Page): Promise<(string | null)[]> => page.evaluate(() => (window as unknown as { printCaptures: (string | null)[] }).printCaptures);
+function printFixture(recipient: boolean) {
+  let state = createScenario("day-before-visit");
+  if (recipient) state = value(setConsent(state, { patientId: "may", recipientId: "david", level: "full", categories: ["body", "measurements"] }));
+  const saved = confirmed(state, recipient ? "david" : undefined);
+  if (recipient) saved.state.context = { actorId: "david", patientId: "may", perspective: "caregiver" };
+  return saved;
+}
+for (const recipient of [false, true]) test(`system print waits for the refreshed confirmed preview: recipient=${recipient}`, async ({ page }) => {
+  const locale = recipient ? "en" : "zh-HK";
+  await page.addInitScript(locale => localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale, liteMode: false, introComplete: true })), locale);
+  const saved = printFixture(recipient);
+  await start(page, saved.state, `/print?brief=${saved.id}`);
+  await expect(page.getByTestId("print-packet")).toContainText("151/94");
+  await interceptPrint(page);
+  let newer = await snapshot(page);
+  newer.observations[0].systolic = 201;
+  newer.observations[0].diastolic = 101;
+  newer.observations[0].revision++;
+  newer = value(confirmBrief(reconcileBriefs(newer), saved.id));
+  expect(isDemoState(newer)).toBe(true);
+  const expected = briefToText(value(prepareBriefExport(newer, saved.id)), locale);
+  expect(expected).toContain("201/101");
+  await page.evaluate(d => localStorage.setItem("caremate-v4", JSON.stringify(d)), newer);
+  const print = page.getByRole("button", { name: recipient ? "Open system print dialog" : "打開系統打印畫面" });
+  await print.click();
+  expect(await printCaptures(page)).toEqual([]);
+  await expect(page.getByTestId("print-packet")).toHaveText(expected);
+  await expect(page.getByRole("status")).toContainText(recipient ? "Preview updated" : "預覽已更新");
+  await print.click();
+  expect(await printCaptures(page)).toEqual([expected]);
+});
+for (const change of ["personal-draft", "recipient-draft", "revoked", "category"] as const) test(`system print denies an unobserved current storage restriction: ${change}`, async ({ page }) => {
+  const saved = printFixture(change !== "personal-draft");
+  await start(page, saved.state, `/print?brief=${saved.id}`);
+  await expect(page.getByTestId("print-packet")).toContainText("151/94");
+  await interceptPrint(page);
+  const newer = await snapshot(page);
+  if (change === "revoked") newer.grants[0].status = "revoked";
+  else if (change === "category") newer.grants[0].categories = ["body"];
+  else { newer.observations[0].systolic = 201; newer.observations[0].revision++; }
+  expect(isDemoState(newer)).toBe(true);
+  await page.evaluate(d => localStorage.setItem("caremate-v4", JSON.stringify(d)), newer);
+  await page.getByRole("button", { name: "打開系統打印畫面" }).click();
+  expect(await printCaptures(page)).toEqual([]);
+  await expect(page.getByTestId("print-packet")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "打開系統打印畫面" })).toHaveCount(0);
+});
