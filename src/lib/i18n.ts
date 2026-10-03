@@ -1,6 +1,21 @@
 import type { Locale } from "./types";
 
 export const messages = {
+  "storage.error": { zh: "此裝置暫時不能儲存。你仍可繼續操作；目前更改只保留在記憶體，關閉或重新整理後可能遺失。", en: "This device cannot save right now. You can continue; current changes are kept in memory and may be lost when you close or reload." },
+  "storage.memoryOnly": { zh: "已在記憶體更新；此裝置暫時不能儲存。", en: "Updated in memory; this device cannot save right now." },
+  "demo.sharedPending": { zh: "目前沒有可顯示的共享資料。請由 May 選擇分享範圍。", en: "No shared information is available here. May chooses what to share." },
+  "demo.perspective": { zh: "測試視角", en: "Test perspective" },
+  "demo.scenario": { zh: "完整測試情境", en: "Complete test scenario" },
+  "demo.first-use": { zh: "首次使用", en: "First use" },
+  "demo.routine-day": { zh: "日常一天", en: "Routine day" },
+  "demo.dizziness": { zh: "頭暈紀錄", en: "Dizziness" },
+  "demo.low-mood": { zh: "心情低落", en: "Low mood" },
+  "demo.share-needed": { zh: "需要分享", en: "Sharing needed" },
+  "demo.caregiver-alert": { zh: "家屬協助事項", en: "Caregiver attention" },
+  "demo.day-before-visit": { zh: "覆診前一天", en: "Day before visit" },
+  "demo.next-morning": { zh: "翌日早上", en: "Next morning" },
+  "demo.after-visit": { zh: "覆診後", en: "After visit" },
+  "demo.urgent-help": { zh: "即時求助", en: "Urgent help" },
   "product.name": { zh: "康伴", en: "CareMate" },
   "nav.today": { zh: "今日", en: "Today" },
   "nav.health": { zh: "健康", en: "Health" },

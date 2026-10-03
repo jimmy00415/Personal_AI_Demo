@@ -82,9 +82,9 @@ test("settings can clear the data on this device and start over, keeping languag
   await expect(page.getByTestId("daily-brief")).toContainText("Dizziness this morning");
   await expect(page.getByTestId("talk-to-caremate")).toBeVisible();
 
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v3") ?? "{}") as { episodeSaved?: boolean; locale?: string });
-  expect(saved.episodeSaved).toBeFalsy();
-  expect(saved.locale).toBe("en");
+  const saved = await page.evaluate(() => ({ demo: JSON.parse(localStorage.getItem("caremate-v4") ?? "{}"), preferences: JSON.parse(localStorage.getItem("caremate-v4-preferences") ?? "{}") }));
+  expect(saved.demo.episodes.every((episode: { saved: boolean }) => !episode.saved)).toBe(true);
+  expect(saved.preferences.locale).toBe("en");
 });
 
 test("the emergency page never shows patient navigation", async ({ page }) => {

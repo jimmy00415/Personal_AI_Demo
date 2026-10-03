@@ -1,4 +1,4 @@
-import { averageBp, appointments, bpReadings, michelleMeds, allergy, report } from "./seed";
+import { averageBp, appointments, bpReadings, michelleMeds, report, currentDemo } from "./seed";
 import { formatDateTime, formatShortDate, formatTime } from "./clock";
 import type { Answers, Appointment, BookingStatus, JourneyPhase } from "./types";
 import type { Locale, Localized } from "./types";
@@ -8,7 +8,9 @@ export function michelleBp() {
 }
 
 export function motherBp() {
-  return bpReadings.filter((r) => r.personId === "lai-wah");
+  const s = currentDemo();
+  const grant = s.grants.find(g => g.recipientId === "david" && g.status === "active" && g.level === "full" && g.categories.includes("measurements"));
+  return grant ? s.observations.map(r => ({ ...r, personId: "lai-wah" as const })) : [];
 }
 
 export function bpAverage() {
@@ -24,7 +26,10 @@ export function michelleAppt(list: Appointment[] = appointments) {
 }
 
 export function motherAppt() {
-  return appointments.find((a) => a.personId === "lai-wah")!;
+  const s = currentDemo();
+  const grant = s.grants.find(g => g.recipientId === "david" && g.status === "active" && g.level !== "alerts-only" && g.categories.includes("appointments"));
+  const appointment = grant ? s.appointments.find(a => a.status === "scheduled") : undefined;
+  return { id: appointment?.id ?? "unshared", personId: "lai-wah" as const, title: appointment?.title ?? { zh: "", en: "" }, at: appointment?.scheduledAt ?? s.clock };
 }
 
 const ONSET_TEXT: Record<NonNullable<Answers["onset"]>, Localized> = {

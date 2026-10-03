@@ -25,21 +25,21 @@ import type {
 import { messages, translate, type MessageKey } from "./i18n";
 import { classifyFreeText } from "./ask-llm";
 import { symptomLine } from "./selectors";
-import { NEXT_CLOCK, OPENING_CLOCK, STORAGE_KEY } from "./types";
-import {
-  clinicSlots,
-  createAppointments,
-  createDoses,
-  createMemories,
-  createRecords,
-  createTasks,
-  defaultQuestions,
-  emptyAnswers,
-  familyConsent,
-} from "./seed";
+import { NEXT_CLOCK, OPENING_CLOCK } from "./types";
+import type { ActorId, DemoState, ScenarioId } from "./demo/types";
+import { createScenario } from "./demo/scenarios";
+import { loadDemo, saveDemo, loadPreferences, savePreferences, getEmergencySession, setEmergencySession } from "./demo/persistence";
+import { selectContext } from "./demo/selectors";
+import { applyLegacyPatch, projectLegacy, currentEpisode } from "./demo/legacy";
+import { bindDemoReader } from "./seed";
+import { clinicSlots, emptyAnswers } from "./seed";
 import { addMinutes, clockParts } from "./clock";
 
 export interface AppState {
+  demo: DemoState;
+  introComplete: boolean;
+  persistenceError: string | null;
+  activeEmergencyEpisodeId: string | null;
   locale: Locale;
   liteMode: boolean;
   clock: string;
@@ -79,6 +79,10 @@ export interface AppState {
 }
 
 interface Actions {
+  setPerspective: (actorId: ActorId) => void;
+  applyScenario: (id: ScenarioId) => void;
+  setScenarioClock: (at: string) => void;
+  resetDemo: () => void;
   hydrate: () => void;
   persistNow: () => void;
   setLocale: (locale: Locale) => void;
@@ -148,96 +152,16 @@ function onsetQuestion(): ChatMessage {
   return { id: ONSET_QUESTION_ID, role: "assistant", text: say("ask.onsetQ") };
 }
 
-function persistable(s: AppState): AppState {
-  return { ...s };
-}
-
-function loadPersisted(): Partial<AppState> | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Partial<AppState>) : null;
-  } catch {
-    return null;
-  }
-}
-
-function savePersisted(s: AppState) {
-  if (typeof window === "undefined") return;
-  const { toast, pendingPath, hydrated, ...rest } = s;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
-}
-
-const SESSION_KEY = "caremate-session";
-
-/** True on the first load in this tab; reloads within the same tab return false. */
-function beginSession(): boolean {
-  try {
-    if (window.sessionStorage.getItem(SESSION_KEY)) return false;
-    window.sessionStorage.setItem(SESSION_KEY, "1");
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * An emergency notice belongs to the session that raised it. Someone opening
- * the app later is asked the urgent question again rather than shown an old
- * alarm as if it were happening now. Nothing else in the saved world changes.
- */
-function leaveStaleEmergency(state: AppState): AppState {
-  if (state.phase !== "urgent_help") return state;
-  const fresh = world(state.clock);
-  return {
-    ...state,
-    step: fresh.step,
-    phase: fresh.phase,
-    answers: { ...state.answers, urgent: null },
-    messages: fresh.messages,
-  };
-}
-
 function world(clock = OPENING_CLOCK): AppState {
+  const demo = { ...createScenario("dizziness"), clock };
   return {
-    locale: "zh-HK",
-    liteMode: false,
-    clock,
-    viewingPersonId: "michelle",
-    healthTab: "overview",
-    step: "urgent",
-    phase: "concern_open",
-    messages: [
-      { id: "m-open", role: "assistant", text: { zh: "我看到你今早記錄了頭暈，血壓是151/94。先確認幾項可能需要即時處理的情況。", en: "I can see you recorded dizziness this morning, and your blood pressure is 151/94. First I need to check a few situations that may need urgent care." } },
-    ],
-    answers: { ...emptyAnswers },
-    episodeSaved: false,
-    doses: createDoses(),
-    tasks: createTasks(),
-    records: createRecords(),
-    memories: createMemories(),
-    questions: defaultQuestions.map((q) => ({ ...q })),
-    customQuestion: "",
-    contactStatus: "not_contacted",
-    contactNote: "",
-    followup: "none",
-    followupAt: null,
-    consent: { ...familyConsent },
-    sharingStopped: false,
-    motherBriefReady: false,
-    accompanyAdded: false,
-    pendingPath: null,
-    toast: null,
-    todayScroll: 0,
-    selectedRecordId: null,
-    forgetId: null,
-    sourceOpen: false,
-    expandedLab: null,
-    readingNotes: {},
-    hydrated: false,
-    appointments: createAppointments(),
-    bookingStatus: "none",
-    selectedSlotId: "slot-17-1100",
+    ...projectLegacy(demo, null), demo,
+    locale: "zh-HK", liteMode: false, introComplete: false,
+    persistenceError: null, activeEmergencyEpisodeId: null,
+    viewingPersonId: "michelle", healthTab: "overview",
+    customQuestion: "", pendingPath: null, toast: null, todayScroll: 0,
+    selectedRecordId: null, forgetId: null, sourceOpen: false, expandedLab: null,
+    hydrated: false, selectedSlotId: "slot-17-1100",
   };
 }
 
@@ -378,39 +302,89 @@ function savedWorld(base: AppState): AppState {
 
 let toastTimer: number | undefined;
 
-export const useAppStore = create<AppState & Actions>((set, get) => ({
+export const useAppStore = create<AppState & Actions>((rawSet, get) => {
+  // Existing routes submit legacy-shaped patches; translate first, publish one atomic snapshot.
+  // Compatibility fields are recalculated, never persisted or independently authoritative.
+  const set = (patch: Partial<AppState>) => {
+    const current = get();
+    const demo = patch.demo ?? applyLegacyPatch(current.demo, patch);
+    let activeEmergencyEpisodeId = patch.activeEmergencyEpisodeId === undefined ? current.activeEmergencyEpisodeId : patch.activeEmergencyEpisodeId;
+    if (patch.phase === "urgent_help" && demo.context.actorId === "may") activeEmergencyEpisodeId = currentEpisode(demo)?.id ?? null;
+    rawSet({ ...patch, demo, activeEmergencyEpisodeId, ...projectLegacy(demo, activeEmergencyEpisodeId) });
+  };
+  const savePersisted = (state: AppState) => {
+    if (typeof window === "undefined") return;
+    try {
+      const results = [saveDemo(window.localStorage, state.demo), savePreferences(window.localStorage, { locale: state.locale, liteMode: state.liteMode, introComplete: state.introComplete }), setEmergencySession(window.sessionStorage, state.activeEmergencyEpisodeId)];
+      const failed = results.find(r => !r.ok);
+      rawSet({ persistenceError: failed && !failed.ok ? failed.code : null, ...(failed && state.toast ? { toast: translate("storage.memoryOnly", state.locale) } : {}) });
+    } catch (error) { rawSet({ persistenceError: error instanceof Error ? error.name : "StorageUnavailable" }); }
+  };
+  const setDocumentPreferences = () => {
+    if (typeof document === "undefined") return;
+    document.documentElement.lang = get().locale;
+    document.documentElement.classList.toggle("lite", get().liteMode);
+  };
+  return {
   ...world(),
-
-  hydrate: () => {
-    const saved = loadPersisted();
-    const locale = window.localStorage.getItem("caremate-locale") === "en" ? "en" : saved?.locale ?? "zh-HK";
-    const liteMode = window.localStorage.getItem("caremate-lite") === "1" || saved?.liteMode === true;
-    const firstLoadInThisTab = beginSession();
-    if (saved && typeof saved.clock === "string" && saved.step) {
-      const restored: AppState = { ...world(), ...saved, locale, liteMode, toast: null, pendingPath: null, hydrated: true };
-      set(firstLoadInThisTab ? leaveStaleEmergency(restored) : restored);
-      if (firstLoadInThisTab) savePersisted(get());
-    } else set({ locale, liteMode, hydrated: true });
-    document.documentElement.lang = locale === "en" ? "en" : "zh-HK";
-    document.documentElement.classList.toggle("lite", liteMode);
+  setPerspective: (actorId) => {
+    set({ demo: { ...get().demo, context: selectContext(get().demo, actorId) }, viewingPersonId: "michelle" });
+    savePersisted(get());
   },
-  persistNow: () => savePersisted(persistable(get())),
+  applyScenario: (id) => {
+    const demo = createScenario(id);
+    const activeEmergencyEpisodeId = id === "urgent-help" ? demo.episodes.find(e => e.disposition === "urgent")?.id ?? null : null;
+    set({ ...world(), demo, locale: get().locale, liteMode: get().liteMode, introComplete: get().introComplete, activeEmergencyEpisodeId, hydrated: true });
+    savePersisted(get());
+  },
+  setScenarioClock: (at) => {
+    if (!/(?:Z|[+-]\d\d:\d\d)$/.test(at) || !Number.isFinite(Date.parse(at))) return;
+    set({ demo: { ...get().demo, clock: at } });
+    savePersisted(get());
+  },
+  resetDemo: () => {
+    get().applyScenario("dizziness");
+    set({ pendingPath: "/" });
+  },
+  hydrate: () => {
+    if (typeof window === "undefined" || get().hydrated) return;
+    let demo = get().demo;
+    let preferences = { locale: get().locale, liteMode: get().liteMode, introComplete: get().introComplete };
+    let activeEmergencyEpisodeId: string | null = null;
+    let persistenceError: string | null = null;
+    try {
+      const loaded = loadDemo(window.localStorage);
+      if (loaded.ok) demo = loaded.value ?? demo;
+      else persistenceError = loaded.code;
+      const prefs = loadPreferences(window.localStorage);
+      if (prefs.ok) preferences = prefs.value ?? preferences;
+      else persistenceError = prefs.code;
+      const session = getEmergencySession(window.sessionStorage);
+      if (session.ok) activeEmergencyEpisodeId = demo.episodes.some(e => e.id === session.value && e.disposition === "urgent") ? session.value : null;
+      else persistenceError = session.code;
+      const episode = currentEpisode(demo);
+      if (!activeEmergencyEpisodeId && episode?.disposition === "urgent") {
+        const id = `episode-recheck-${demo.episodes.length + 1}`;
+        demo = { ...demo, episodes: [...demo.episodes, { ...episode, id, answers: { ...emptyAnswers }, disposition: "open", step: "urgent", phase: "concern_open", saved: false, followup: "none", revision: 1 }], assistantSessions: [...demo.assistantSessions, { id: `session-${id}`, patientId: "may", episodeId: id, messages: world().messages, status: "active", draft: "" }] };
+      }
+    } catch (error) { persistenceError = error instanceof Error ? error.name : "StorageUnavailable"; }
+    set({ demo, ...preferences, activeEmergencyEpisodeId, persistenceError, toast: null, pendingPath: null, hydrated: true });
+    setDocumentPreferences();
+    // Do not overwrite a corrupt or unreadable snapshot with a misleading successful save.
+    if (!persistenceError) savePersisted(get());
+  },
+  persistNow: () => savePersisted(get()),
   setLocale: (locale) => {
     set({ locale });
-    window.localStorage.setItem("caremate-locale", locale);
-    document.documentElement.lang = locale === "en" ? "en" : "zh-HK";
+    setDocumentPreferences();
     savePersisted(get());
   },
   setLiteMode: (liteMode) => {
     set({ liteMode });
-    window.localStorage.setItem("caremate-lite", liteMode ? "1" : "0");
-    document.documentElement.classList.toggle("lite", liteMode);
+    setDocumentPreferences();
     savePersisted(get());
   },
-  setViewingPerson: (viewingPersonId) => {
-    set({ viewingPersonId });
-    savePersisted(get());
-  },
+  setViewingPerson: (viewingPersonId) => set({ viewingPersonId }),
   setHealthTab: (healthTab) => set({ healthTab }),
   setTodayScroll: (todayScroll) => set({ todayScroll }),
   setSelectedRecord: (selectedRecordId) => set({ selectedRecordId }),
@@ -430,21 +404,15 @@ export const useAppStore = create<AppState & Actions>((set, get) => ({
       if (get().toast === toast) set({ toast: null });
     }, 2200);
   },
-  resetWorld: () => {
-    window.localStorage.removeItem(STORAGE_KEY);
-    const next = world();
-    set({ ...next, locale: get().locale, liteMode: get().liteMode, pendingPath: "/", hydrated: true });
-    savePersisted(get());
-  },
+  resetWorld: () => get().resetDemo(),
   clearDeviceData: () => {
-    get().resetWorld();
-    get().showToast(translate("settings.cleared", get().locale));
+    get().resetDemo();
+    get().showToast(translate(get().persistenceError ? "storage.memoryOnly" : "settings.cleared", get().locale));
   },
   applyScene: (id) => {
-    const locale = get().locale;
-    const liteMode = get().liteMode;
-    const next = sceneWorld(id);
-    set({ ...next, locale, liteMode, hydrated: true });
+    const legacy = sceneWorld(id);
+    const demo = applyLegacyPatch(createScenario("dizziness"), legacy);
+    set({ ...legacy, demo, locale: get().locale, liteMode: get().liteMode, introComplete: get().introComplete, activeEmergencyEpisodeId: id === "urgent-help" ? currentEpisode(demo)?.id ?? null : null, hydrated: true });
     savePersisted(get());
   },
   advanceClock: () => {
@@ -791,7 +759,10 @@ export const useAppStore = create<AppState & Actions>((set, get) => ({
     get().showToast(get().locale === "en" ? "Your schedule was updated" : "已更新你的行程");
     savePersisted(get());
   },
-}));
+  };
+});
+
+bindDemoReader(() => useAppStore.getState().demo);
 
 function labelOf(id: string): { zh: string; en: string } {
   const map: Record<string, { zh: string; en: string }> = {

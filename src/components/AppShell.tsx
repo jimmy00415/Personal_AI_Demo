@@ -28,6 +28,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const setLiteMode = useAppStore((s) => s.setLiteMode);
   const emergency = useAppStore((s) => s.phase === "urgent_help");
   const hydrated = useAppStore((s) => s.hydrated);
+  const persistenceError = useAppStore((s) => s.persistenceError);
+  const actorId = useAppStore((s) => s.demo.context.actorId);
+  const sharedLegacyView = useAppStore((s) => s.viewingPersonId === "lai-wah");
+  const actorName = useAppStore((s) => s.demo.profiles.find(p => p.id === s.demo.context.actorId)?.displayName ?? "");
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -62,11 +66,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return <div className="min-h-dvh bg-background" />;
   }
 
+  const storageNotice = persistenceError ? <p role="alert" data-testid="persistence-error" className="relative z-50 bg-amber-50 p-4 text-ink">{t("storage.error")}</p> : null;
+  // Legacy clinical pages have no permission-aware renderer. Keep them closed for David
+  // until their task-specific migrations install the shared projection.
+  const restricted = !["/dev", "/settings", "/about"].some(path => samePath(pathname, path)) && (actorId === "david" || sharedLegacyView && pathname.startsWith("/family"));
+  const content = restricted ? <p data-testid="shared-unavailable" className="py-8">{t("demo.sharedPending")}</p> : children;
+
   if (hideChrome) {
     return (
       <div className="min-h-dvh bg-background">
         <ToastHost />
-        <div className={bare ? "" : "mx-auto max-w-2xl px-6 py-10"}>{children}</div>
+        {storageNotice}
+        <div className={bare ? "" : "mx-auto max-w-2xl px-6 py-10"}>{content}</div>
       </div>
     );
   }
@@ -74,6 +85,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-dvh bg-background">
       <ToastHost />
+      {storageNotice}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[72px] flex-col border-r border-line/80 bg-background px-2 py-5 md:flex lg:w-[220px] lg:px-3">
         <Link href="/" className="mb-8 flex items-center gap-2.5 px-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-brand text-[15px] text-white">康</span>
@@ -111,7 +123,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="relative px-1">
           <button type="button" data-testid="profile-menu-btn" onClick={() => setMenuOpen((v) => !v)} className="flex min-h-11 w-full items-center gap-2 rounded-[12px] px-2 text-left hover:bg-surface">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-[11px] text-white">MC</span>
-            <span className="hidden lg:block text-[13px]">Michelle</span>
+            <span className="hidden lg:block text-[13px]">{actorName}</span>
           </button>
           {menuOpen ? (
             <div className="absolute bottom-14 left-0 right-0 z-40 rounded-[14px] bg-surface p-2 shadow-[0_8px_28px_rgba(23,26,24,0.08)]" data-testid="profile-menu">
@@ -153,7 +165,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="pb-28 md:ml-[72px] md:pb-10 lg:ml-[220px]">
-        <div className="mx-auto w-full max-w-[1080px] px-5 py-6 md:px-8 md:py-10">{children}</div>
+        <div className="mx-auto w-full max-w-[1080px] px-5 py-6 md:px-8 md:py-10">{content}</div>
       </main>
 
       {!hideFab ? (

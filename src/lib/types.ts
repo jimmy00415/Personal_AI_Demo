@@ -218,4 +218,6 @@ export const MICHELLE: PersonId = "michelle";
 export const MOTHER: PersonId = "lai-wah";
 export const OPENING_CLOCK = "2026-09-16T08:45:00+08:00";
 export const NEXT_CLOCK = "2026-09-17T08:30:00+08:00";
-export const STORAGE_KEY = "caremate-v3";
+export const STORAGE_KEY = "caremate-v4";
+/** Retained on-device; never reassigned to the new personas. */
+export const LEGACY_STORAGE_KEY = "caremate-v3";

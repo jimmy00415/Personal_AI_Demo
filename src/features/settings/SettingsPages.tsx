@@ -6,6 +6,7 @@ import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
 import type { SceneId } from "@/lib/types";
 import { Button } from "@/components/system";
+import { scenarioIds } from "@/lib/demo/scenarios";
 
 export function SettingsPage() {
   const { t, locale, liteMode } = useI18n();
@@ -93,6 +94,9 @@ export function DevPage() {
   const applyScene = useAppStore((s) => s.applyScene);
   const resetWorld = useAppStore((s) => s.resetWorld);
   const advanceClock = useAppStore((s) => s.advanceClock);
+  const setPerspective = useAppStore((s) => s.setPerspective);
+  const applyScenario = useAppStore((s) => s.applyScenario);
+  const actorId = useAppStore((s) => s.demo.context.actorId);
   const scenes: SceneId[] = [
     "morning-start",
     "symptom-summary",
@@ -107,6 +111,15 @@ export function DevPage() {
   return (
     <div className="mx-auto max-w-[640px]" data-testid="dev-page">
       <h1 className="text-[30px]">{t("dev.title")}</h1>
+      <h2 className="mt-6">{t("demo.perspective")}</h2>
+      <div className="mt-2 flex gap-2">
+        <Button data-testid="perspective-may" variant={actorId === "may" ? "primary" : "secondary"} onClick={() => setPerspective("may")}>May Chan</Button>
+        <Button data-testid="perspective-david" variant={actorId === "david" ? "primary" : "secondary"} onClick={() => setPerspective("david")}>David Chan</Button>
+      </div>
+      <h2 className="mt-6">{t("demo.scenario")}</h2>
+      <div className="mt-2 grid gap-2">
+        {scenarioIds.map(id => <Button key={id} variant="secondary" data-testid={`scenario-${id}`} onClick={() => applyScenario(id)}>{t(`demo.${id}`)}</Button>)}
+      </div>
       <div className="mt-6 grid gap-2">
         <Button data-testid="demo-reset" onClick={resetWorld}>
           {t("dev.reset")}

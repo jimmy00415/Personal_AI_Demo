@@ -10,9 +10,9 @@ async function reset(page: import("@playwright/test").Page) {
 
 test("main journey: dizziness, med gap, brief, follow-up, next morning", async ({ page }) => {
     await page.addInitScript(() => {
-      localStorage.removeItem("caremate-v3");
-      localStorage.removeItem("caremate-locale");
-      localStorage.removeItem("caremate-lite");
+      localStorage.removeItem("caremate-v4");
+      localStorage.removeItem("caremate-v4-preferences");
+      sessionStorage.removeItem("caremate-v4-emergency");
     });
   await reset(page);
   await expect(page.getByTestId("daily-brief")).toContainText("今早頭暈");
@@ -78,9 +78,9 @@ test("main journey: dizziness, med gap, brief, follow-up, next morning", async (
 
 test("follow-up declined does not create reminder", async ({ page }) => {
     await page.addInitScript(() => {
-      localStorage.removeItem("caremate-v3");
-      localStorage.removeItem("caremate-locale");
-      localStorage.removeItem("caremate-lite");
+      localStorage.removeItem("caremate-v4");
+      localStorage.removeItem("caremate-v4-preferences");
+      sessionStorage.removeItem("caremate-v4-emergency");
     });
   await reset(page);
   await page.getByTestId("talk-to-caremate").click();
@@ -95,35 +95,32 @@ test("follow-up declined does not create reminder", async ({ page }) => {
   await expect(page.getByTestId("plan-page")).toContainText("沒有加入明早提醒");
 });
 
-test("family does not expose medication and can add accompany task", async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.removeItem("caremate-v3");
-      localStorage.removeItem("caremate-locale");
-      localStorage.removeItem("caremate-lite");
-    });
+test("family context does not expose unshared records or change the active actor", async ({ page }) => {
+  await reset(page);
   await page.goto("/family");
   await page.getByTestId("family-lai-wah").click();
-  await expect(page.getByTestId("mother-profile")).toBeVisible();
-  await expect(page.getByTestId("mother-profile")).toContainText("尚未分享");
-  await expect(page.getByTestId("mother-profile")).not.toContainText("Amlodipine");
-  await expect(page.getByTestId("mother-profile")).not.toContainText("Losartan");
-  await page.getByTestId("mother-book").click();
-  await expect(page.getByTestId("book-page")).toContainText("不能代媽媽");
-  await page.getByTestId("nav-family").click();
-  if (await page.getByTestId("family-lai-wah").isVisible()) {
-    await page.getByTestId("family-lai-wah").click();
-  }
-  await page.getByTestId("prep-mother").click();
-  await page.getByTestId("accompany").click();
-  await page.getByTestId("nav-care").click();
-  await expect(page.getByTestId("plan-page")).toContainText("陪媽媽覆診");
+  await expect(page.getByTestId("shared-unavailable")).toBeVisible();
+  await expect(page.getByTestId("prep-mother")).toHaveCount(0);
+  await expect(page.getByTestId("accompany")).toHaveCount(0);
+  await expect(page.locator("main")).not.toContainText("Amlodipine");
+  await page.goto("/dev");
+  await page.getByTestId("perspective-david").click();
+  await page.goto("/health");
+  await expect(page.getByTestId("shared-unavailable")).toBeVisible();
+  await page.goto("/dev");
+  await page.getByTestId("perspective-may").click();
+  await page.goto("/health");
+  await expect(page.getByTestId("health-page")).toBeVisible();
+  const state = await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!));
+  expect(state.context).toEqual({ actorId: "may", patientId: "may", perspective: "patient" });
+  expect(state.tasks.some((t: { kind: string }) => t.kind === "accompany")).toBe(false);
 });
 
 test("agent books earlier visit from known records", async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.removeItem("caremate-v3");
-    localStorage.removeItem("caremate-locale");
-    localStorage.removeItem("caremate-lite");
+    localStorage.removeItem("caremate-v4");
+    localStorage.removeItem("caremate-v4-preferences");
+    sessionStorage.removeItem("caremate-v4-emergency");
   });
   await reset(page);
   await page.getByTestId("talk-to-caremate").click();
@@ -154,9 +151,9 @@ test("agent books earlier visit from known records", async ({ page }) => {
 
 test("urgent branch blocks routine completion", async ({ page }) => {
     await page.addInitScript(() => {
-      localStorage.removeItem("caremate-v3");
-      localStorage.removeItem("caremate-locale");
-      localStorage.removeItem("caremate-lite");
+      localStorage.removeItem("caremate-v4");
+      localStorage.removeItem("caremate-v4-preferences");
+      sessionStorage.removeItem("caremate-v4-emergency");
     });
   await page.goto("/ask");
   await page.getByTestId("quick-reply-chest-breath").click();
