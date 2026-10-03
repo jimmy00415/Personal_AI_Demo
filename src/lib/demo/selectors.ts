@@ -1,5 +1,14 @@
 import { clockParts } from "../clock";
-import type { ActorId, DemoContext, DemoState, PatientId, TodayView } from "./types";
+import type { ActorId, CareTask, DemoContext, DemoState, PatientId, TodayView } from "./types";
+
+export function isTaskOverdue(state: DemoState, task: CareTask) {
+  return task.status !== "completed" && task.status !== "cancelled" && task.scheduledAt !== null && Date.parse(task.scheduledAt) < Date.parse(state.clock);
+}
+export function selectTodayTasks(state: DemoState) {
+  if (state.context.actorId !== "may") return [];
+  const date = clockParts(state.clock).dateKey;
+  return state.tasks.filter(t => t.patientId === state.context.patientId && t.status !== "cancelled" && (!t.scheduledAt || clockParts(t.scheduledAt).dateKey === date || isTaskOverdue(state, t)));
+}
 
 export function selectObservations(state: DemoState, patientId: PatientId = state.context.patientId) {
   return state.observations.filter(r => r.patientId === patientId).toSorted((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt));
@@ -18,7 +27,7 @@ export function selectContext(state: DemoState, actorId: ActorId): DemoContext {
 export function selectToday(state: DemoState): TodayView {
   const patientId = state.context.patientId;
   const tasks = state.context.actorId === "may"
-    ? state.tasks.filter(t => t.patientId === patientId && t.status !== "cancelled" && t.status !== "completed")
+    ? selectTodayTasks(state).filter(t => t.status !== "completed")
     : [];
   const episodes = state.context.actorId === "may" ? state.episodes.filter(e => e.patientId === patientId).slice(-1) : [];
   const urgent = episodes.find(e => e.disposition === "urgent");
@@ -31,5 +40,5 @@ export function selectToday(state: DemoState): TodayView {
       : due ? { kind: "follow-up", sourceId: due.id, href: "/check-in" }
         : appointment ? { kind: "prepare-visit", sourceId: appointment.id, href: "/brief" }
           : { kind: "routine", sourceId: null, href: "/check-in" };
-  return { patientId, hero, tasks, dailyEntry: { patientId, href: "/check-in", draftId: state.drafts.find(d => d.patientId === patientId)?.id ?? null } };
+  return { patientId, hero, tasks, dailyEntry: { patientId, href: "/check-in", draftId: state.drafts.find(d => d.patientId === patientId && d.taskId === null && clockParts(d.occurredAt).dateKey === clockParts(state.clock).dateKey)?.id ?? null } };
 }

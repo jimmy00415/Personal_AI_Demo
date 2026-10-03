@@ -3,7 +3,7 @@ import type { ActionResult, CheckInDraft, DemoState, Observation, PatientId } fr
 
 export function createCheckInDraft(state: DemoState, patientId: PatientId): CheckInDraft {
   const day = clockParts(state.clock).dateKey;
-  const draft = state.drafts.find(d => d.patientId === patientId && clockParts(d.occurredAt).dateKey === day);
+  const draft = state.drafts.find(d => d.patientId === patientId && d.taskId === null && clockParts(d.occurredAt).dateKey === day);
   if (draft) return draft;
   return { id: `draft-${patientId}-${day}`, patientId, occurredAt: state.clock, mood: null, body: null, note: "", step: "mood", taskId: null, revision: 1 };
 }
@@ -21,8 +21,8 @@ export function commitCheckIn(state: DemoState, draft: CheckInDraft): ActionResu
   if (!/(?:Z|[+-]\d\d:\d\d)$/.test(draft.occurredAt) || !Number.isFinite(Date.parse(draft.occurredAt))) return { ok: false, code: "TimeRequired" };
   if (Date.parse(draft.occurredAt) > Date.parse(state.clock)) return { ok: false, code: "FutureTime" };
   const prior = state.checkIns.find(r => r.draftId === draft.id && r.patientId === draft.patientId);
-  const unchanged = prior && prior.mood === draft.mood && prior.body === draft.body && prior.note === draft.note && prior.occurredAt === draft.occurredAt;
-  const record = unchanged ? prior : { id: prior?.id ?? `checkin-${draft.id}`, draftId: draft.id, patientId: draft.patientId, occurredAt: draft.occurredAt, enteredAt: prior?.enteredAt ?? state.clock, mood: draft.mood, body: draft.body, note: draft.note, revision: (prior?.revision ?? 0) + 1 };
+  const unchanged = prior && prior.mood === draft.mood && prior.body === draft.body && prior.note === draft.note && prior.occurredAt === draft.occurredAt && (prior.taskId ?? null) === draft.taskId && prior.followupChange === draft.followupChange;
+  const record = unchanged ? prior : { id: prior?.id ?? `checkin-${draft.id}`, draftId: draft.id, patientId: draft.patientId, occurredAt: draft.occurredAt, enteredAt: prior?.enteredAt ?? state.clock, mood: draft.mood, body: draft.body, note: draft.note, ...(draft.taskId ? { taskId: draft.taskId } : {}), ...(draft.followupChange ? { followupChange: draft.followupChange } : {}), revision: (prior?.revision ?? 0) + 1 };
   return { ok: true, value: { ...state, checkIns: [...state.checkIns.filter(r => r.id !== record.id), record], drafts: state.drafts.filter(d => d.id !== draft.id), briefs: unchanged ? state.briefs : invalidateBriefs(state, record.id) } };
 }
 export function saveObservation(state: DemoState, observation: Observation): ActionResult<DemoState> {

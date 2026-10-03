@@ -10,6 +10,8 @@ async function reset(page: import("@playwright/test").Page) {
 
 test("main journey: dizziness, med gap, brief, follow-up, next morning", async ({ page }) => {
     await page.addInitScript(() => {
+      if (sessionStorage.getItem("caremate-test-initialised")) return;
+      sessionStorage.setItem("caremate-test-initialised", "1");
       localStorage.removeItem("caremate-v4");
       localStorage.removeItem("caremate-v4-preferences");
       sessionStorage.removeItem("caremate-v4-emergency");
@@ -63,7 +65,10 @@ test("main journey: dizziness, med gap, brief, follow-up, next morning", async (
   await page.getByTestId("follow-830").click();
   await expect(page.getByTestId("followup-scheduled")).toBeVisible();
   await page.getByTestId("change-time-follow").click();
-  await expect(page.getByTestId("toast")).toBeVisible();
+  await expect(page.getByTestId("reminder-picker").locator("input")).toHaveValue("2026-09-17T08:30");
+  await page.getByLabel("提醒時間（香港時間）").fill("2026-09-17T09:15");
+  await page.getByTestId("reminder-save").click();
+  await expect(page.getByTestId("followup-scheduled")).toContainText("9:15");
 
   await page.getByTestId("nav-care").click();
   await expect(page.getByTestId("follow-morning-row")).toBeVisible();
@@ -73,11 +78,31 @@ test("main journey: dizziness, med gap, brief, follow-up, next morning", async (
   await expect(page.getByTestId("today-page")).toBeVisible();
   await expect(page.getByTestId("daily-brief")).toContainText("昨天記錄了頭暈");
   await page.getByTestId("next-no-dizzy").click();
+  await expect(page.getByTestId("checkin-page")).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!).tasks.find((t: { id: string }) => t.id === "task-morning").status)).not.toBe("completed");
+  await page.getByTestId("mood-okay").click();
+  await page.getByTestId("checkin-next").click();
+  await page.getByTestId("body-well").click();
+  await page.getByTestId("checkin-next").click();
+  await page.getByTestId("checkin-next").click();
+  await page.getByTestId("followup-measurement").click();
+  await page.getByLabel("收縮壓（mmHg）").fill("140");
+  await page.getByLabel("舒張壓（mmHg）").fill("88");
+  await page.getByTestId("observation-save").click();
+  await page.getByTestId("checkin-save").click();
+  await expect(page.getByTestId("followup-checkin-receipt")).toContainText("已完成記錄事項");
+  const confirmed = await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!));
+  expect(confirmed.checkIns).toHaveLength(1);
+  expect(confirmed.tasks.find((t: { id: string }) => t.id === "task-morning").status).toBe("completed");
+  expect(confirmed.tasks.find((t: { id: string }) => t.id === "task-contact").status).toBe("pending");
+  await page.getByTestId("checkin-receipt").getByRole("link", { name: "今日", exact: true }).click();
   await expect(page.getByTestId("daily-brief")).toContainText("暫時沒有再頭暈");
 });
 
 test("follow-up declined does not create reminder", async ({ page }) => {
     await page.addInitScript(() => {
+      if (sessionStorage.getItem("caremate-test-initialised")) return;
+      sessionStorage.setItem("caremate-test-initialised", "1");
       localStorage.removeItem("caremate-v4");
       localStorage.removeItem("caremate-v4-preferences");
       sessionStorage.removeItem("caremate-v4-emergency");
@@ -151,6 +176,8 @@ test("agent books earlier visit from known records", async ({ page }) => {
 
 test("urgent branch blocks routine completion", async ({ page }) => {
     await page.addInitScript(() => {
+      if (sessionStorage.getItem("caremate-test-initialised")) return;
+      sessionStorage.setItem("caremate-test-initialised", "1");
       localStorage.removeItem("caremate-v4");
       localStorage.removeItem("caremate-v4-preferences");
       sessionStorage.removeItem("caremate-v4-emergency");

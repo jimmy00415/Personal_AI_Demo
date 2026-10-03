@@ -76,10 +76,13 @@ export interface CheckInDraft extends PatientEntity {
   note: string;
   step: "mood" | "body" | "note" | "review";
   taskId: string | null;
+  followupChange?: "no-dizzy" | "still" | "worse";
   revision: number;
 }
 export interface DailyCheckIn extends PatientEntity {
   draftId: string; occurredAt: string; enteredAt: string; mood: Mood; body: BodyFeeling; note: string; revision: number;
+  taskId?: string | null;
+  followupChange?: "no-dizzy" | "still" | "worse";
 }
 export interface MedicationDose extends PatientEntity {
   medicationId: string;

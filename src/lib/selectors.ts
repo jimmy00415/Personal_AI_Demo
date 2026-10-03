@@ -1,6 +1,6 @@
 import { appointments, bpReadings, michelleMeds, report, currentDemo } from "./seed";
 import { selectBpAverage } from "./demo/selectors";
-import { formatDateTime, formatShortDate, formatTime } from "./clock";
+import { clockParts, formatDateTime, formatShortDate, formatTime } from "./clock";
 import type { Answers, Appointment, BookingStatus, JourneyPhase } from "./types";
 import type { Locale, Localized } from "./types";
 
@@ -66,7 +66,7 @@ export function todayHero(
   if (phase === "urgent_help") {
     return { kind: "urgent" as const, titleKey: "today.heroUrgent" as const, bodyKey: "today.heroUrgentBody" as const };
   }
-  const next = clock.startsWith("2026-09-17");
+  const next = clockParts(clock).dateKey === "2026-09-17";
   if (next && nextMorning === "no-dizzy") {
     return { kind: "logged" as const, titleKey: "today.loggedNo" as const, bodyKey: "today.contactPending" as const };
   }

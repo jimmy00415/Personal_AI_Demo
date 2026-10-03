@@ -27,6 +27,7 @@ import { classifyFreeText } from "./ask-llm";
 import { symptomLine } from "./selectors";
 import { NEXT_CLOCK, OPENING_CLOCK } from "./types";
 import type { ActionResult, ActorId, CheckInDraft, DemoState, Observation, ScenarioId } from "./demo/types";
+import { cancelTask, completeCheckInTask, createAfterVisitTask, followupDraftId, recordContactOutcome, rescheduleTask, scheduleFollowup, setDoseStatus, snoozeTask, type ContactOutcome, type DoseCorrection, type FollowupChange } from "./demo/care";
 import { createCheckInDraft, updateCheckInDraft, commitCheckIn, saveObservation } from "./demo/check-in";
 import { createScenario } from "./demo/scenarios";
 import { loadDemo, saveDemo, loadPreferences, savePreferences, getEmergencySession, setEmergencySession } from "./demo/persistence";
@@ -80,9 +81,18 @@ export interface AppState {
 }
 
 interface Actions {
+  setDoseStatus: (id: string, status: DoseCorrection) => ActionResult<void>;
+  scheduleFollowup: (at: string) => ActionResult<void>;
+  cancelCareTask: (id: string) => ActionResult<void>;
+  snoozeTask: (id: string, at: string) => ActionResult<void>;
+  rescheduleTask: (id: string, at: string) => ActionResult<void>;
+  recordContactOutcome: (id: string, outcome: ContactOutcome, note: string) => ActionResult<void>;
+  createAfterVisitTask: (input: Parameters<typeof createAfterVisitTask>[1]) => ActionResult<void>;
+  completeCheckInTask: (taskId: string, checkInId: string) => ActionResult<void>;
+  beginTaskCheckIn: (taskId: string, change?: FollowupChange) => ActionResult<string>;
   beginCheckIn: () => void;
   editCheckIn: (id: string) => void;
-  patchCheckIn: (id: string, patch: Partial<Pick<CheckInDraft, "mood" | "body" | "note" | "step">>) => void;
+  patchCheckIn: (id: string, patch: Partial<Pick<CheckInDraft, "mood" | "body" | "note" | "step" | "followupChange">>) => void;
   saveCheckIn: (id: string) => ActionResult<void>;
   saveObservation: (observation: Observation) => ActionResult<void>;
   setPerspective: (actorId: ActorId) => void;
@@ -118,10 +128,10 @@ interface Actions {
   toggleQuestion: (id: string) => void;
   addCustomQuestion: () => void;
   setContact: (status: ContactStatus, note: string) => void;
-  acceptFollowup: (at: string) => void;
+  acceptFollowup: (at: string) => ActionResult<void>;
   declineFollowup: () => void;
   cancelFollowup: () => void;
-  changeFollowup: (at: string) => void;
+  changeFollowup: (at: string) => ActionResult<void>;
   answerNextMorning: (id: NextId) => void;
   completeTask: (id: string) => void;
   excludeMemory: (id: string) => void;
@@ -331,8 +341,35 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     document.documentElement.lang = get().locale;
     document.documentElement.classList.toggle("lite", get().liteMode);
   };
+  const applyCare = (result: ActionResult<DemoState>): ActionResult<void> => {
+    if (!result.ok) return result;
+    set({ demo: result.value });
+    savePersisted(get());
+    return { ok: true, value: undefined };
+  };
   return {
   ...world(),
+  setDoseStatus: (id, status) => applyCare(setDoseStatus(get().demo, id, status)),
+  scheduleFollowup: at => applyCare(scheduleFollowup(get().demo, get().demo.context.patientId, at)),
+  cancelCareTask: id => applyCare(cancelTask(get().demo, id)),
+  snoozeTask: (id, at) => applyCare(snoozeTask(get().demo, id, at)),
+  rescheduleTask: (id, at) => applyCare(rescheduleTask(get().demo, id, at)),
+  recordContactOutcome: (id, outcome, note) => applyCare(recordContactOutcome(get().demo, id, outcome, note)),
+  createAfterVisitTask: input => applyCare(createAfterVisitTask(get().demo, input)),
+  completeCheckInTask: (taskId, checkInId) => applyCare(completeCheckInTask(get().demo, taskId, checkInId)),
+  beginTaskCheckIn: (taskId, change) => {
+    const demo = get().demo;
+    const task = demo.tasks.find(t => t.id === taskId && t.patientId === demo.context.patientId && t.kind === "check-in");
+    if (!task || demo.context.actorId !== "may") return { ok: false, code: "task-missing" };
+    if (["completed", "cancelled"].includes(task.status)) return { ok: false, code: "task-inactive" };
+    if (task.scheduledAt && Date.parse(task.scheduledAt) > Date.parse(demo.clock)) return { ok: false, code: "not-due" };
+    const id = followupDraftId(task);
+    const prior = demo.drafts.find(d => d.id === id);
+    const draft: CheckInDraft = { ...(prior ?? { id, patientId: task.patientId, occurredAt: demo.clock, mood: null, body: null, note: "", step: "mood", taskId, revision: 1 }), ...(change ? { followupChange: change } : {}) };
+    set({ demo: { ...demo, drafts: prior ? demo.drafts.map(d => d.id === id ? draft : d) : [...demo.drafts, draft] } });
+    savePersisted(get());
+    return { ok: true, value: id };
+  },
   beginCheckIn: () => {
     const demo = get().demo;
     if (demo.context.actorId !== "may") return;
@@ -345,24 +382,26 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     const demo = get().demo;
     const record = demo.checkIns.find(r => r.id === id && r.patientId === demo.context.patientId);
     if (!record || demo.context.actorId !== "may") return;
-    const draft: CheckInDraft = demo.drafts.find(d => d.id === record.draftId && d.patientId === record.patientId) ?? { id: record.draftId, patientId: record.patientId, occurredAt: record.occurredAt, mood: record.mood, body: record.body, note: record.note, step: "mood", taskId: null, revision: record.revision };
+    const draft: CheckInDraft = demo.drafts.find(d => d.id === record.draftId && d.patientId === record.patientId) ?? { id: record.draftId, patientId: record.patientId, occurredAt: record.occurredAt, mood: record.mood, body: record.body, note: record.note, step: "mood", taskId: record.taskId ?? null, ...(record.followupChange ? { followupChange: record.followupChange } : {}), revision: record.revision };
     set({ demo: { ...demo, drafts: [...demo.drafts.filter(d => d.id !== draft.id), draft] }, selectedRecordId: null });
     savePersisted(get());
   },
   patchCheckIn: (id, patch) => {
     const demo = get().demo;
     if (demo.context.actorId !== "may") return;
-    const { step, ...content } = patch;
-    set({ demo: { ...demo, drafts: demo.drafts.map(d => d.id === id ? { ...updateCheckInDraft(d, content), ...(step ? { step } : {}) } : d) } });
+    const { step, followupChange, ...content } = patch;
+    set({ demo: { ...demo, drafts: demo.drafts.map(d => d.id === id ? { ...updateCheckInDraft(d, content), ...(step ? { step } : {}), ...(followupChange ? { followupChange } : {}) } : d) } });
     savePersisted(get());
   },
   saveCheckIn: (id) => {
     const demo = get().demo;
     const draft = demo.drafts.find(d => d.id === id);
     if (!draft) return demo.checkIns.some(r => r.draftId === id) ? { ok: true, value: undefined } : { ok: false, code: "DraftMissing" };
+    if (draft.taskId && draft.step !== "review") return { ok: false, code: "review-required" };
     const result = commitCheckIn(demo, draft);
     if (!result.ok) return result;
-    set({ demo: result.value });
+    const completed = draft.taskId ? completeCheckInTask(result.value, draft.taskId, result.value.checkIns.find(c => c.draftId === id)!.id) : null;
+    set({ demo: completed?.ok ? completed.value : result.value });
     savePersisted(get());
     return { ok: true, value: undefined };
   },
@@ -462,28 +501,11 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     savePersisted(get());
   },
   advanceClock: () => {
-    const s = get();
-    const tasks = [...s.tasks];
-    if (s.followup === "scheduled" && !tasks.some((t) => t.id === "task-morning")) {
-      tasks.push({
-        id: "task-morning",
-        personId: "michelle",
-        date: "2026-09-17",
-        time: clockParts(s.followupAt ?? NEXT_CLOCK).hour
-          ? `${String(clockParts(s.followupAt ?? NEXT_CLOCK).hour).padStart(2, "0")}:${String(clockParts(s.followupAt ?? NEXT_CLOCK).minute).padStart(2, "0")}`
-          : "08:30",
-        title: { zh: "記錄血壓和頭暈情況", en: "Record blood pressure and dizziness" },
-        kind: "followup",
-        state: "scheduled",
-      });
-    }
-    set({
-      clock: NEXT_CLOCK,
-      phase: "next_session",
-      step: "next_morning",
-      tasks,
-      pendingPath: "/",
-    });
+    const demo = get().demo;
+    const followup = demo.tasks.find(t => t.id === "task-morning" && t.status !== "cancelled" && t.status !== "completed");
+    const target = followup?.scheduledAt && clockParts(followup.scheduledAt).dateKey === clockParts(NEXT_CLOCK).dateKey && Date.parse(followup.scheduledAt) > Date.parse(NEXT_CLOCK) ? followup.scheduledAt : NEXT_CLOCK;
+    const clock = Date.parse(demo.clock) < Date.parse(target) ? target : demo.clock;
+    set({ demo: { ...demo, clock, episodes: demo.episodes.map(e => e.followup === "scheduled" ? { ...e, phase: "next_session", step: "next_morning", revision: e.revision + 1 } : e) }, pendingPath: "/" });
     savePersisted(get());
   },
   openAsk: () => set({ pendingPath: "/ask" }),
@@ -690,67 +712,25 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     get().showToast(get().locale === "en" ? "Added to consultation questions" : "已加入就診問題");
     savePersisted(get());
   },
-  setContact: (contactStatus, contactNote) => {
-    set({
-      contactStatus,
-      contactNote,
-      tasks: get().tasks.map((t) =>
-        t.id === "task-contact" ? { ...t, state: contactStatus === "not_contacted" ? "pending" : "completed" } : t,
-      ),
-    });
-    get().showToast(get().locale === "en" ? "Saved" : "已儲存");
-    savePersisted(get());
+  setContact: (status, note) => {
+    get().recordContactOutcome("task-contact", status === "left_message" ? "left-message" : status === "not_contacted" ? "not-contacted" : "contacted", note);
   },
-  acceptFollowup: (at) => {
-    const time = clockParts(at);
-    const hhmm = `${String(time.hour).padStart(2, "0")}:${String(time.minute).padStart(2, "0")}`;
-    const tasks = get().tasks.filter((t) => t.id !== "task-morning");
-    tasks.push({
-      id: "task-morning",
-      personId: "michelle",
-      date: "2026-09-17",
-      time: hhmm,
-      title: { zh: "記錄血壓和頭暈情況", en: "Record blood pressure and dizziness" },
-      kind: "followup",
-      state: "scheduled",
-    });
-    set({ followup: "scheduled", followupAt: at, phase: "followup_scheduled", tasks });
-    get().showToast(get().locale === "en" ? "Added to tomorrow morning" : "已加入明早的待辦事項");
-    savePersisted(get());
-  },
+  acceptFollowup: at => get().scheduleFollowup(at),
   declineFollowup: () => {
-    set({
-      followup: "declined",
-      followupAt: null,
-      phase: "followup_declined",
-      tasks: get().tasks.filter((t) => t.id !== "task-morning"),
-    });
+    const demo = get().demo;
+    const next = demo.tasks.some(t => t.id === "task-morning") ? cancelTask(demo, "task-morning") : { ok: true as const, value: demo };
+    if (!next.ok) return;
+    set({ demo: { ...next.value, episodes: next.value.episodes.map(e => e.id === currentEpisode(demo)?.id ? { ...e, followup: "declined", phase: "followup_declined", revision: e.revision + 1 } : e) } });
     savePersisted(get());
   },
-  cancelFollowup: () => {
-    set({
-      followup: "cancelled",
-      followupAt: null,
-      tasks: get().tasks.map((t) => (t.id === "task-morning" ? { ...t, state: "cancelled" } : t)),
-    });
-    get().showToast(get().locale === "en" ? "Your schedule was updated" : "已更新你的行程");
-    savePersisted(get());
+  cancelFollowup: () => { get().cancelCareTask("task-morning"); },
+  changeFollowup: at => get().scheduleFollowup(at),
+  answerNextMorning: change => {
+    const result = get().beginTaskCheckIn("task-morning", change);
+    if (result.ok) set({ pendingPath: `/check-in?draft=${encodeURIComponent(result.value)}` });
   },
-  changeFollowup: (at) => get().acceptFollowup(at),
-  answerNextMorning: (id) => {
-    set({
-      answers: { ...get().answers, nextMorning: id },
-      phase: "next_logged",
-      tasks: get().tasks.map((t) => (t.id === "task-morning" ? { ...t, state: "completed" } : t)),
-    });
-    savePersisted(get());
-  },
-  completeTask: (id) => {
-    set({
-      tasks: get().tasks.map((t) => (t.id === id && t.state !== "not_due" ? { ...t, state: "completed" } : t)),
-    });
-    savePersisted(get());
-  },
+  // Recording tasks require their specific confirmation action; a generic click is not evidence.
+  completeTask: () => {},
   excludeMemory: (id) => {
     set({
       memories: get().memories.map((m) => (m.id === id ? { ...m, excluded: true } : m)),

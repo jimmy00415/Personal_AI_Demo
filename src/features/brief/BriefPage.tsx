@@ -8,6 +8,8 @@ import { formatDateTime, formatShortDate, formatTime } from "@/lib/clock";
 import { briefText, contactScript, michelleBp, bpAverage, michelleAppt, symptomLine } from "@/lib/selectors";
 import { allergy, michelleMeds, report } from "@/lib/seed";
 import { Button, SourceLabel } from "@/components/system";
+import { downloadTaskIcs } from "@/lib/demo/exports";
+import { ReminderTimePicker } from "@/features/care/ReminderTimePicker";
 
 export function BriefPage() {
   const { t, locale, L } = useI18n();
@@ -30,6 +32,10 @@ export function BriefPage() {
   const episodeSaved = useAppStore((s) => s.episodeSaved);
   const appointments = useAppStore((s) => s.appointments);
   const bookingStatus = useAppStore((s) => s.bookingStatus);
+  const followupTask = useAppStore(s => s.demo.tasks.find(task => task.id === "task-morning"));
+  const persistenceError = useAppStore(s => s.persistenceError);
+  const [timeOpen, setTimeOpen] = useState(false);
+  const [reminderError, setReminderError] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
   const [note, setNote] = useState(contactNote);
   const [pick, setPick] = useState("08:30");
@@ -56,23 +62,13 @@ export function BriefPage() {
   }
 
   function downloadIcs() {
-    const ics = [
-      "BEGIN:VCALENDAR",
-      "VERSION:2.0",
-      "BEGIN:VEVENT",
-      "DTSTART:20260917T003000Z",
-      "DTEND:20260917T010000Z",
-      "SUMMARY:Record blood pressure and dizziness",
-      "END:VEVENT",
-      "END:VCALENDAR",
-    ].join("\r\n");
-    const blob = new Blob([ics], { type: "text/calendar" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "caremate-followup.ics";
-    a.click();
-    URL.revokeObjectURL(url);
+    if (followupTask) downloadTaskIcs(followupTask);
+  }
+  function saveReminder(at: string) {
+    const result = changeFollowup(at);
+    setReminderError(result.ok ? null : result.code);
+    if (result.ok) setTimeOpen(false);
+    return result;
   }
 
   return (
@@ -229,12 +225,12 @@ export function BriefPage() {
           <h2 className="text-[20px]">{t("follow.offer")}</h2>
           <p className="mt-2 text-ink-muted">{t("follow.offerBody")}</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button data-testid="follow-830" onClick={() => acceptFollowup("2026-09-17T08:30:00+08:00")}>
+            <Button data-testid="follow-830" onClick={() => { const result = acceptFollowup("2026-09-17T08:30:00+08:00"); setReminderError(result.ok ? null : result.code); }}>
               {t("follow.830")}
             </Button>
             <div className="flex gap-2">
-              <input type="time" value={pick} onChange={(e) => setPick(e.target.value)} className="min-h-11 rounded-[10px] bg-surface-secondary px-3" />
-              <Button variant="secondary" data-testid="follow-pick" onClick={() => acceptFollowup(`2026-09-17T${pick}:00+08:00`)}>
+              <input aria-label={t("care.time")} type="time" value={pick} onChange={(e) => setPick(e.target.value)} className="min-h-11 rounded-[10px] bg-surface-secondary px-3" />
+              <Button variant="secondary" data-testid="follow-pick" onClick={() => { const result = acceptFollowup(`2026-09-17T${pick}:00+08:00`); setReminderError(result.ok ? null : result.code); }}>
                 {t("follow.pick")}
               </Button>
             </div>
@@ -247,10 +243,10 @@ export function BriefPage() {
 
       {followup === "scheduled" ? (
         <section className="mt-10" data-testid="followup-scheduled">
-          <p>{t("follow.added")}</p>
-          <p className="mt-1 text-ink-muted">{t("follow.addedDetail")}</p>
+          <p role="status">{t(persistenceError ? "storage.memoryOnly" : "follow.added")}</p>
+          {followupTask?.scheduledAt ? <p className="mt-1 text-ink-muted"><time dateTime={followupTask.scheduledAt}>{formatDateTime(followupTask.scheduledAt, locale)}</time> · {L(followupTask.title)}</p> : null}
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="secondary" data-testid="change-time-follow" onClick={() => changeFollowup("2026-09-17T09:00:00+08:00")}>
+            <Button variant="secondary" data-testid="change-time-follow" onClick={() => setTimeOpen(true)}>
               {t("follow.change")}
             </Button>
             <Button variant="plain" onClick={cancelFollowup}>
@@ -260,10 +256,12 @@ export function BriefPage() {
               {t("follow.ics")}
             </Button>
           </div>
+          {timeOpen && followupTask?.scheduledAt ? <div className="mt-4"><ReminderTimePicker at={followupTask.scheduledAt} onSave={saveReminder} onCancel={() => setTimeOpen(false)} /></div> : null}
           <p className="mt-2 text-[13px] text-ink-soft">{t("follow.icsNote")}</p>
         </section>
       ) : null}
 
+      {reminderError ? <p role="alert">{t(reminderError === "past-time" || reminderError === "invalid-time" ? `care.${reminderError}` : "care.error")}</p> : null}
       <p className="mt-8 text-[14px] text-ink-soft">
         {L(appt.title)} · {formatDateTime(appt.at, locale)}
       </p>

@@ -32,6 +32,13 @@ export function createScenario(id: ScenarioId): DemoState {
     grants: [], events: [], briefs: [],
     memories: fixture.createMemories().map(m => ({ id: m.id, patientId: "may", value: m.value, detail: m.detail, source: m.source, enteredAt: m.enteredAt, enabled: !m.excluded, pendingConfirm: !!m.pendingConfirm, sourceRecordIds: m.id === "mem-gap" ? ["dose-ator-14"] : [], revision: 1 })),
   };
+  // The existing fixture medicines also have today's scheduled tasks. A missing dose record is unknown.
+  for (const task of state.tasks.filter(t => t.kind === "medication")) {
+    const medicine = fixture.michelleMeds.find(m => m.name === task.title.en)!;
+    const doseId = `dose-${task.id}`;
+    state.medicationDoses.push({ id: doseId, patientId: "may", medicationId: medicine.id, name: medicine.name, dose: medicine.dose, scheduledAt: task.scheduledAt!, status: "unknown", occurredAt: null, enteredAt: null, source: "user", revision: 1 });
+    task.sourceRecordIds = [doseId];
+  }
   if (["dizziness", "share-needed", "caregiver-alert", "next-morning", "urgent-help"].includes(id)) {
     state.episodes.push({ id: "episode-dizzy", patientId: "may", answers: { ...fixture.emptyAnswers }, step: "urgent", disposition: "open", sourceRecordIds: ["rec-dizzy", "bp-16"], revision: 1, saved: false, phase: "concern_open", followup: "none" });
     state.assistantSessions.push({ id: "session-dizzy", patientId: "may", episodeId: "episode-dizzy", status: "active", draft: "", messages: [{ id: "m-open", role: "assistant", text: { zh: "我看到你今早記錄了頭暈，血壓是151/94。先確認幾項可能需要即時處理的情況。", en: "I can see you recorded dizziness this morning, and your blood pressure is 151/94. First I need to check a few situations that may need urgent care." } }] });
@@ -52,6 +59,7 @@ export function createScenario(id: ScenarioId): DemoState {
     state.clock = "2026-09-17T09:15:00+08:00";
     state.episodes[0] = { ...state.episodes[0], disposition: "ordinary", step: "next_morning", saved: true, phase: "next_session", followup: "scheduled", answers: { urgent: "none", onset: "after-waking", change: "better", medGap: "forgot", nextMorning: null } };
     state.tasks.push({ id: "task-morning", patientId: "may", ownerId: "may", proposedOwnerId: null, kind: "check-in", status: "scheduled", scheduledAt: state.clock, sourceRecordIds: ["rec-dizzy"], shareCategory: "body", contactOutcome: null, contactNote: "", title: { zh: "記錄血壓和頭暈情況", en: "Record blood pressure and dizziness" }, revision: 1 });
+    state.tasks.push({ id: "task-contact", patientId: "may", ownerId: "may", proposedOwnerId: null, kind: "contact", status: "pending", scheduledAt: "2026-09-16T09:00:00+08:00", sourceRecordIds: ["rec-dizzy"], shareCategory: "body", contactOutcome: "not_contacted", contactNote: "", title: { zh: "聯絡醫護", en: "Contact a clinician" }, revision: 1 });
   }
   if (id === "after-visit") {
     state.clock = "2026-09-22T16:00:00+08:00";

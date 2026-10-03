@@ -23,18 +23,20 @@ test("legacy_roundtrips_preserve_domain_only_task_facts_and_revisions", () => {
   }
 });
 
-test("completeTask_changes_only_the_selected_task_and_is_idempotent", () => {
+test("medication_completion_requires_dose_confirmation_and_changes_only_selected_task", () => {
   const demo = createScenario("after-visit");
   demo.tasks.find(t => t.id === "task-amlo")!.status = "snoozed";
   useAppStore.setState({ demo, ...projectLegacy(demo, null) });
   useAppStore.getState().completeTask("task-ator");
+  expect(useAppStore.getState().demo).toEqual(demo);
+  useAppStore.getState().setDoseStatus("dose-task-ator", "user_confirmed_taken");
   const changed = useAppStore.getState().demo;
   expect(changed.tasks.find(t => t.id === "task-ator")).toEqual({ ...demo.tasks.find(t => t.id === "task-ator"), status: "completed", revision: 2 });
   expect(changed.tasks.filter(t => t.id !== "task-ator")).toEqual(demo.tasks.filter(t => t.id !== "task-ator"));
-  useAppStore.getState().completeTask("task-ator");
+  useAppStore.getState().setDoseStatus("dose-task-ator", "user_confirmed_taken");
   expect(useAppStore.getState().demo).toEqual(changed);
   useAppStore.getState().completeTask("task-fixture-attention");
-  expect(useAppStore.getState().demo.tasks.find(t => t.id === "task-fixture-attention")).toEqual({ ...demo.tasks.find(t => t.id === "task-fixture-attention"), status: "completed", revision: 2 });
+  expect(useAppStore.getState().demo.tasks.find(t => t.id === "task-fixture-attention")).toEqual(demo.tasks.find(t => t.id === "task-fixture-attention"));
   useAppStore.getState().resetDemo();
 });
 

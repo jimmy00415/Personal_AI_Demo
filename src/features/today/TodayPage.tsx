@@ -3,19 +3,17 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
 import { formatDate, formatDateTime } from "@/lib/clock";
 import { michelleAppt, todayHero } from "@/lib/selectors";
 import { Button, GroupedList, ListRow } from "@/components/system";
-import { selectToday } from "@/lib/demo/selectors";
+import { isTaskOverdue, selectToday, selectTodayTasks } from "@/lib/demo/selectors";
 
 export function TodayPage() {
   const router = useRouter();
   const { t, locale } = useI18n();
   const clock = useAppStore((s) => s.clock);
-  const tasks = useAppStore((s) => s.tasks);
   const followup = useAppStore((s) => s.followup);
   const episodeSaved = useAppStore((s) => s.episodeSaved);
   const setTodayScroll = useAppStore((s) => s.setTodayScroll);
@@ -26,11 +24,18 @@ export function TodayPage() {
   const appointments = useAppStore((s) => s.appointments);
   const setHealthTab = useAppStore((s) => s.setHealthTab);
   const demo = useAppStore((s) => s.demo);
-  const dailyEntry = selectToday(demo).dailyEntry;
+  const todayView = selectToday(demo);
+  const dailyEntry = todayView.dailyEntry;
   const [why, setWhy] = useState(false);
-  const hero = todayHero(clock, episodeSaved, answers.nextMorning, bookingStatus, phase);
+  const legacyHero = todayHero(clock, episodeSaved, answers.nextMorning, bookingStatus, phase);
+  const hero = todayView.hero.kind === "urgent" ? { kind: "urgent", titleKey: "today.heroUrgent", bodyKey: "today.heroUrgentBody" } as const
+    : todayView.hero.kind === "needs-attention" ? { kind: "attention", titleKey: "today.attentionTitle", bodyKey: "today.attentionBody" } as const
+      : todayView.hero.kind === "follow-up" ? { kind: "next", titleKey: "today.heroNext", bodyKey: "today.heroNextBody" } as const
+        : todayView.hero.kind === "prepare-visit" ? { kind: "prepare", titleKey: "today.prepareTitle", bodyKey: "today.prepareBody" } as const
+          : demo.episodes.length ? { ...legacyHero, kind: legacyHero.kind === "next" ? "saved" : legacyHero.kind }
+            : { kind: "routine", titleKey: "today.routineTitle", bodyKey: "today.routineBody" } as const;
   const appt = michelleAppt(appointments);
-  const todayTasks = tasks.filter((x) => x.personId === "michelle" && (x.date === clock.slice(0, 10) || x.kind === "contact"));
+  const todayTasks = selectTodayTasks(demo);
 
   return (
     <div data-testid="today-page" className="mx-auto max-w-[720px]">
@@ -40,6 +45,7 @@ export function TodayPage() {
       <section data-testid="daily-brief" className="mt-8">
         <h2 className="text-[24px] leading-snug">{t(hero.titleKey)}</h2>
         <p className="measure mt-3 text-[17px] leading-relaxed text-ink-muted">{t(hero.bodyKey)}</p>
+        {hero.kind === "prepare" && bookingStatus === "booked" ? <p className="mt-3 text-ink-muted">{t("today.heroBooked")}</p> : null}
 
         {hero.kind === "urgent" ? (
           <div className="mt-6">
@@ -111,6 +117,8 @@ export function TodayPage() {
             </Button>
           </div>
         ) : null}
+        {hero.kind === "attention" ? <Link href="/care" className="mt-6 inline-flex min-h-11 items-center rounded-[10px] bg-brand px-4 py-3 text-white">{t("care.viewTask")}</Link> : null}
+        {hero.kind === "prepare" ? <Link href="/brief" className="mt-6 inline-flex min-h-11 items-center rounded-[10px] bg-brand px-4 py-3 text-white">{t("today.viewBrief")}</Link> : null}
 
         {followup === "scheduled" && hero.kind === "saved" ? (
           <p className="mt-4 text-[15px] text-ink-muted">{t("today.heroFollow")}</p>
@@ -139,30 +147,9 @@ export function TodayPage() {
       </section>
 
       <section className="mt-10">
-        <div className="mb-2 px-1 text-[13px] text-ink-soft">{t("today.items")}</div>
+        <div data-testid="today-task-count" className="mb-2 px-1 text-[13px] text-ink-soft">{t("today.items")} · {todayTasks.length}</div>
         <GroupedList>
-          {todayTasks.map((task) => (
-            <div key={task.id} className="flex items-center gap-3 px-4 py-3.5" data-testid={`task-${task.id}`}>
-              <span
-                className={`flex h-7 w-7 items-center justify-center rounded-full border ${
-                  task.state === "completed" ? "border-brand bg-brand text-white" : "border-line"
-                }`}
-              >
-                {task.state === "completed" ? <Check className="h-3.5 w-3.5" /> : null}
-              </span>
-              <span className="w-12 text-[13px] text-ink-soft">{task.time}</span>
-              <span className="flex-1 text-[16px]">{locale === "en" ? task.title.en : task.title.zh}</span>
-              <span className="text-[13px] text-ink-soft">
-                {task.state === "completed"
-                  ? t("today.done")
-                  : task.state === "not_due"
-                    ? t("today.notDue")
-                    : task.state === "scheduled"
-                      ? t("today.scheduled")
-                      : t("today.pending")}
-              </span>
-            </div>
-          ))}
+          {todayTasks.map(task => <ListRow key={task.id} testId={`task-${task.id}`} title={locale === "en" ? task.title.en : task.title.zh} meta={task.scheduledAt ? <time dateTime={task.scheduledAt}>{formatDateTime(task.scheduledAt, locale)}</time> : undefined} value={task.status === "completed" ? t("today.done") : isTaskOverdue(demo, task) ? t("care.overdue") : task.kind === "medication" && task.scheduledAt && Date.parse(task.scheduledAt) > Date.parse(clock) ? t("today.notDue") : t(`care.${task.status}`)} onClick={() => router.push(`/care?task=${encodeURIComponent(task.id)}`)} />)}
         </GroupedList>
       </section>
 
