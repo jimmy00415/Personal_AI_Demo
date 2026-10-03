@@ -18,6 +18,13 @@ export const messages = {
   "sharing.recipient": { zh: "選擇收件人", en: "Choose a recipient" },
   "sharing.categories": { zh: "選擇分享內容", en: "Choose content to share" },
   "packet.keyFacts": { zh: "先查看目前重點", en: "Review the current key facts" },
+  "packet.latestBody": { zh: "最近一筆身體紀錄", en: "Latest recorded body entry" },
+  "packet.bodyHistory": { zh: "其他身體歷史紀錄：{count}。完整紀錄見下方。", en: "Other body-history entries: {count}. See the full history below." },
+  "packet.doseHistory": { zh: "這份摘要的服藥紀錄（包含歷史）：{count}", en: "Dose records in this brief (including history): {count}" },
+  "packet.doseRecent": { zh: "按紀錄／預定時間排列的最近服藥紀錄", en: "Most recent listed dose times (recorded or scheduled)" },
+  "packet.doseRemainder": { zh: "其他服藥歷史紀錄：{count}。完整藥物紀錄見下方。", en: "Other dose-history entries: {count}. See the full medication section below." },
+  "packet.recordedAt": { zh: "記錄時間", en: "Recorded at" },
+  "packet.scheduledFor": { zh: "預定服藥時間", en: "Scheduled for" },
 
   "packet.reviewAction": { zh: "核對就診摘要", en: "Review visit brief" },
   "packet.allergy": { zh: "本人提供的過敏資料", en: "Personally recorded allergy" },

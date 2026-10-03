@@ -151,7 +151,7 @@ export interface BriefPacket extends PatientEntity {
   revision: number;
   generatedAt: string;
   confirmedAt: string | null;
-  sections: { id: string; category: ShareCategory | "private"; title: Localized; text: Localized; sourceRecordIds: string[] }[];
+  sections: { id: string; category: ShareCategory | "private"; title: Localized; text: Localized; sourceRecordIds: string[]; /** Composed from the same authorised inputs and covered by the section fingerprint. */ summary?: Localized }[];
   questions: ConsultationQuestion[];
   sourceRecordIds: string[];
   sourceRevisions: Record<string, number>;

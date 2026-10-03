@@ -1,11 +1,13 @@
 import { clockParts, formatDateTime } from "../clock";
 import { messages } from "../i18n";
 import { selectSharingProjection } from "./sharing";
-import type { ActionResult, BriefPacket, DemoState, Locale, Localized, PatientId, RecipientId, ShareCategory } from "./types";
+import type { ActionResult, BriefPacket, DemoState, Locale, Localized, MedicationDose, PatientId, RecipientId, ShareCategory } from "./types";
 
 const fail = (code: string): ActionResult<never> => ({ ok: false, code });
 const join = (lines: Localized[]): Localized => ({ zh: lines.map(l => l.zh).join("\n"), en: lines.map(l => l.en).join("\n") });
 const literal = (value: string): Localized => ({ zh: value, en: value });
+const counted = (text: Localized, count: number): Localized => ({ zh: text.zh.replace("{count}", `${count}`), en: text.en.replace("{count}", `${count}`) });
+const oneLine = (text: Localized): Localized => ({ zh: text.zh.replaceAll("\n", " · "), en: text.en.replaceAll("\n", " · ") });
 const stamped = (text: Localized, occurredAt: string, source?: string, enteredAt?: string): Localized => ({
   zh: `${text.zh} · ${formatDateTime(occurredAt, "zh-HK")}${source ? ` · ${source}` : ""}${enteredAt && enteredAt !== occurredAt ? ` / ${formatDateTime(enteredAt, "zh-HK")}` : ""}`,
   en: `${text.en} · ${formatDateTime(occurredAt, "en")}${source ? ` · ${source}` : ""}${enteredAt && enteredAt !== occurredAt ? ` / ${formatDateTime(enteredAt, "en")}` : ""}`,
@@ -13,6 +15,21 @@ const stamped = (text: Localized, occurredAt: string, source?: string, enteredAt
 const provenance = (source: "user" | "home-measure" | "imported" | "organised") => source === "home-measure" ? messages["source.home"] : messages[`source.${source}`];
 function sourced(text: Localized, occurredAt: string, source: Parameters<typeof provenance>[0], enteredAt?: string) {
   return join([stamped(text, occurredAt, undefined, enteredAt), provenance(source)]);
+}
+const doseStatus = (d: MedicationDose) => messages[d.status === "unknown" ? "packet.unknown" : d.status === "user_reported_not_taken" ? "care.notTaken" : "care.recordedTaken"];
+const doseText = (d: MedicationDose) => sourced(join([literal(d.name), d.dose, doseStatus(d)]), d.occurredAt ?? d.scheduledAt, d.source, d.enteredAt ?? undefined);
+function medicationSummary(doses: MedicationDose[]): Localized {
+  const taken = doses.filter(d => d.status === "recorded_taken" || d.status === "user_confirmed_taken").length;
+  const notTaken = doses.filter(d => d.status === "user_reported_not_taken").length;
+  const unknown = doses.filter(d => d.status === "unknown").length;
+  const recent = [...doses].sort((a, b) => Date.parse(b.occurredAt ?? b.scheduledAt) - Date.parse(a.occurredAt ?? a.scheduledAt)).slice(0, 4);
+  return join([
+    counted(messages["packet.doseHistory"], doses.length),
+    { zh: `${messages["care.recordedTaken"].zh}：${taken} · ${messages["care.notTaken"].zh}：${notTaken} · ${messages["packet.unknown"].zh}：${unknown}`, en: `${messages["care.recordedTaken"].en}: ${taken} · ${messages["care.notTaken"].en}: ${notTaken} · ${messages["packet.unknown"].en}: ${unknown}` },
+    messages["packet.doseRecent"],
+    ...recent.map(d => oneLine(sourced(join([literal(d.name), d.dose, doseStatus(d), messages[d.occurredAt ? "packet.recordedAt" : "packet.scheduledFor"]]), d.occurredAt ?? d.scheduledAt, d.source, d.enteredAt ?? undefined))),
+    ...(doses.length > recent.length ? [counted(messages["packet.doseRemainder"], doses.length - recent.length)] : []),
+  ]);
 }
 const mine = <T extends { patientId: PatientId }>(items: T[], patientId: PatientId) => items.filter(r => r.patientId === patientId);
 const idFor = (state: DemoState, appointmentId: string, recipientId: string) => `brief-${appointmentId}-${clockParts(state.clock).dateKey}-${recipientId}`;
@@ -34,14 +51,18 @@ function build(state: DemoState, patientId: PatientId, options: { appointmentId:
   const reports = p ? p.reports : mine(state.reports, patientId);
   const appointments = p ? p.appointments.filter(a => a.id === appointment.id) : [appointment];
   const sections: BriefPacket["sections"] = [];
-  const add = (id: string, category: ShareCategory | "private", title: Localized, text: Localized, sourceRecordIds: string[] = []) => sections.push({ id, category, title, text, sourceRecordIds });
-  if (p) add("sharing", "private", messages["packet.scope"], join([messages[`sharing.${p.level!}`], ...p.summary, messages["packet.privatePolicy"]]));
+  const add = (id: string, category: ShareCategory | "private", title: Localized, text: Localized, sourceRecordIds: string[] = [], summary?: Localized) => sections.push({ id, category, title, text, sourceRecordIds, ...(summary ? { summary } : {}) });
+  if (p) add("sharing", "private", messages["packet.scope"], join([messages[`sharing.${p.level!}`], ...p.summary, messages["packet.privatePolicy"]]), [], p.level === "summary" ? join([messages[`sharing.${p.level}`], ...p.summary]) : undefined);
   if (!p) add("profile", "private", messages["packet.background"], join(state.profiles.filter(profile => profile.id === patientId).flatMap(profile => profile.knownConditions.map(c => c.name))));
-  if (allowed("body") && p?.level !== "summary") add("body", "body", messages["packet.body"], join([
-    ...records.filter(r => r.category === "body").map(r => sourced(r.text, r.occurredAt, r.source, r.enteredAt)),
-    ...checkIns.flatMap(c => c.body ? [sourced(messages[`sharing.body.${c.body}`], c.occurredAt, "user", c.enteredAt)] : []),
-    ...(!records.some(r => r.category === "body") && !checkIns.some(c => c.body) ? [messages["sharing.bodyEmpty"]] : []),
-  ]), [...records.filter(r => r.category === "body").map(r => r.id), ...checkIns.filter(c => c.body).map(c => c.id)]);
+  if (allowed("body") && p?.level !== "summary") {
+    const entries = [
+      ...records.filter(r => r.category === "body").map(r => ({ id: r.id, occurredAt: r.occurredAt, text: sourced(r.text, r.occurredAt, r.source, r.enteredAt) })),
+      ...checkIns.flatMap(c => c.body ? [{ id: c.id, occurredAt: c.occurredAt, text: sourced(messages[`sharing.body.${c.body}`], c.occurredAt, "user", c.enteredAt) }] : []),
+    ];
+    const latest = [...entries].sort((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt)).at(-1);
+    const summary = latest ? join([messages["packet.latestBody"], latest.text, ...(entries.length > 1 ? [counted(messages["packet.bodyHistory"], entries.length - 1)] : [])]) : messages["sharing.bodyEmpty"];
+    add("body", "body", messages["packet.body"], join(entries.length ? entries.map(e => e.text) : [messages["sharing.bodyEmpty"]]), entries.map(e => e.id), summary);
+  }
   if (options.includeMood && allowed("mood") && p?.level !== "summary") add("mood", "mood", messages["packet.mood"], join([
     ...checkIns.flatMap(c => c.mood && c.mood !== "skipped" ? [sourced(messages[`sharing.mood.${c.mood}`], c.occurredAt, "user", c.enteredAt)] : []),
     ...records.filter(r => r.category === "mood").map(r => sourced(r.text, r.occurredAt, r.source, r.enteredAt)),
@@ -52,7 +73,7 @@ function build(state: DemoState, patientId: PatientId, options: { appointmentId:
     add("average", "measurements", messages["packet.average"], literal(average), observations.map(o => o.id));
     add("readings", "measurements", messages["brief.s3"], join(observations.map(o => sourced(literal(`${o.systolic}/${o.diastolic} mmHg`), o.occurredAt, o.source, o.enteredAt))), observations.map(o => o.id));
   }
-  if (doses.length) add("medication", "medication", messages["packet.medication"], join(doses.map(d => sourced(join([literal(d.name), d.dose, messages[d.status === "unknown" ? "packet.unknown" : d.status === "user_reported_not_taken" ? "care.notTaken" : "care.recordedTaken"]]), d.occurredAt ?? d.scheduledAt, d.source, d.enteredAt ?? undefined))), doses.map(d => d.id));
+  if (doses.length) add("medication", "medication", messages["packet.medication"], join(doses.map(doseText)), doses.map(d => d.id), medicationSummary(doses));
   const allergies = p ? [] : mine(state.memories, patientId).filter(m => m.id === "mem-pen");
   if (allergies.length) add("allergy", "private", messages["packet.allergy"], join(allergies.map(m => sourced(join([m.value, m.detail]), m.enteredAt, m.source))), allergies.map(m => m.id));
   if (reports.length) add("reports", "measurements", messages["brief.s5"], join(reports.map(r => sourced(join([r.title, r.originalText, ...r.results.map(v => ({ zh: `${v.name.zh} ${v.value} ${v.unit}`, en: `${v.name.en} ${v.value} ${v.unit}` }))]), r.occurredAt, "imported", r.enteredAt))), reports.map(r => r.id));
