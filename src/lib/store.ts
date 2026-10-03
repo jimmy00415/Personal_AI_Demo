@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { setConsent, revokeConsent, type ConsentInput } from "./demo/sharing";
+import { setConsent, revokeConsent, shareCategories, sharingLevels, type ConsentInput } from "./demo/sharing";
 import type {
   Answers,
   Appointment,
@@ -310,18 +310,44 @@ function savedWorld(base: AppState): AppState {
   };
 }
 
-/** Merge permission revisions without overwriting unsaved clinical facts or tab context. */
-function mergeNewerPermissions(base: DemoState, incoming: DemoState): DemoState {
-  const newer = incoming.grants.filter(g => g.revision > (base.grants.find(old => old.id === g.id)?.revision ?? 0));
-  if (!newer.length) return base;
-  const grants = [...base.grants.filter(g => !newer.some(n => n.id === g.id)), ...newer];
-  return { ...base, grants,
-    events: base.events.map(e => { const latest = incoming.events.find(n => n.id === e.id); return latest && latest.revision > e.revision && latest.status === "revoked" ? latest : e; }),
-    briefs: base.briefs.map(b => {
-      const grant = newer.find(g => g.patientId === b.patientId && g.recipientId === b.recipientId);
-      return grant && b.status === "confirmed" && (grant.status !== "active" || b.grantRevision !== grant.revision) ? { ...b, status: "draft", confirmedAt: null, revision: b.revision + 1 } : b;
-    }),
-  };
+/** Higher revisions win; equal revisions meet at the most restrictive shared permission.
+ * Revoked beats active, categories intersect, and the lower content level wins. The
+ * revision stays stable so a later explicit May edit can supersede the conflict.
+ * Only permission facts change: unsaved clinical data and workflow history stay intact.
+ */
+function mergePermissions(base: DemoState, incoming: DemoState, equalOnly = false): DemoState {
+  const changed = new Set<string>();
+  const grants = [...base.grants];
+  for (const candidate of incoming.grants) {
+    const index = grants.findIndex(g => g.id === candidate.id);
+    const current = grants[index];
+    if (equalOnly && current?.revision !== candidate.revision || current && candidate.revision < current.revision) continue;
+    let resolved = candidate;
+    if (current?.revision === candidate.revision) {
+      const categories = shareCategories.filter(c => current.categories.includes(c) && candidate.categories.includes(c));
+      resolved = { ...current, categories,
+        level: sharingLevels[Math.min(sharingLevels.indexOf(current.level), sharingLevels.indexOf(candidate.level))],
+        status: current.status === "revoked" || candidate.status === "revoked" || !categories.length ? "revoked" : "active",
+        updatedAt: [current.updatedAt, candidate.updatedAt].sort((a, b) => Date.parse(a) - Date.parse(b) || a.localeCompare(b)).at(-1)!,
+      };
+      if (current.status === resolved.status && current.level === resolved.level && current.updatedAt === resolved.updatedAt && current.categories.join() === resolved.categories.join()) continue;
+    }
+    changed.add(candidate.id);
+    if (index < 0) grants.push(resolved); else grants[index] = resolved;
+  }
+  // An event revocation must merge even when the grant itself is identical.
+  const events = base.events.map(e => {
+    const candidate = incoming.events.find(n => n.id === e.id);
+    if (candidate?.status === "revoked" && candidate.revision >= e.revision && (e.status !== "revoked" || candidate.revision > e.revision) && (!equalOnly || candidate.revision === e.revision)) return { ...e, status: "revoked" as const, revision: candidate.revision };
+    const grant = grants.find(g => g.patientId === e.patientId && g.recipientId === e.recipientId && changed.has(g.id));
+    return e.status === "pending" && grant && (grant.status === "revoked" || !grant.categories.includes(e.category)) ? { ...e, status: "revoked" as const, revision: e.revision + 1 } : e;
+  });
+  const briefs = base.briefs.map(b => {
+    const grant = grants.find(g => g.patientId === b.patientId && g.recipientId === b.recipientId && changed.has(g.id));
+    // A same-revision conflict changes the visible content too, invalidating confirmation.
+    return grant && b.status === "confirmed" ? { ...b, status: "draft" as const, confirmedAt: null, revision: b.revision + 1 } : b;
+  });
+  return !changed.size && events.every((e, i) => e === base.events[i]) ? base : { ...base, grants, events, briefs };
 }
 
 let toastTimer: number | undefined;
@@ -342,7 +368,7 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
       const stored = loadDemo(window.localStorage);
       // A delayed preference/task write must never resurrect an older permission snapshot.
       if (preserveNewerGrants && stored.ok && stored.value) {
-        const demo = mergeNewerPermissions(state.demo, stored.value);
+        const demo = mergePermissions(state.demo, stored.value);
         if (demo !== state.demo) { set({ demo }); state = get(); }
       }
       const results = [saveDemo(window.localStorage, state.demo), savePreferences(window.localStorage, { locale: state.locale, liteMode: state.liteMode, introComplete: state.introComplete }), setEmergencySession(window.sessionStorage, state.activeEmergencyEpisodeId)];
@@ -369,7 +395,7 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     if (loaded.ok && loaded.value) {
       const local = get().demo;
       // An unsuccessful save leaves valid local work in memory. Still accept newer revocations.
-      const demo = get().persistenceError ? mergeNewerPermissions(local, loaded.value) : loaded.value;
+      const demo = get().persistenceError ? mergePermissions(local, loaded.value) : mergePermissions(loaded.value, local, true);
       set({ demo: { ...demo, context: local.context }, selectedRecordId: null });
     }
     else if (!loaded.ok) set({ persistenceError: loaded.code });

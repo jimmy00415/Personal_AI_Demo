@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createScenario } from "../src/lib/demo/scenarios";
 import { setConsent, revokeConsent, selectSharingProjection, sharedExportText, shareCategories, sharingLevels, recipients } from "../src/lib/demo/sharing";
+import { useAppStore } from "../src/lib/store";
+import { isDemoState } from "../src/lib/demo/persistence";
 import { createAccompanyTask } from "../src/lib/demo/care";
 import type { DemoState } from "../src/lib/demo/types";
 
@@ -198,3 +200,86 @@ test("storage failure keeps new consent and revocation usable in memory", async 
   await expect(page.getByTestId("shared-empty")).toBeVisible();
   await expect(page.getByTestId("shared-copy")).toHaveCount(0);
 });
+
+class ConflictStorage {
+  values = new Map<string, string>();
+  failWrites = false;
+  getItem(key: string) { return this.values.get(key) ?? null; }
+  setItem(key: string, value: string) { if (this.failWrites) throw new DOMException("full", "QuotaExceededError"); this.values.set(key, value); }
+  removeItem(key: string) { this.values.delete(key); }
+}
+for (const collision of ["revoke", "summary", "category", "disjoint", "event-only"] as const) for (const entry of ["refresh", "write"] as const) {
+  test(`equal revision conflict ${collision} at ${entry} fails closed without losing unsaved work`, () => {
+    const priorStore = useAppStore.getState();
+    const priorWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+    const localStorage = new ConflictStorage();
+    Object.defineProperty(globalThis, "window", { configurable: true, value: { localStorage, sessionStorage: new ConflictStorage() } });
+    try {
+      const initial = createScenario("caregiver-alert"); initial.context = { actorId: "may", patientId: "may", perspective: "patient" };
+      initial.grants[0] = { ...initial.grants[0], level: "full", categories: ["body", "measurements"] };
+      initial.checkIns.push({ id: "history-check", draftId: "history-draft", patientId: "may", occurredAt: initial.clock, enteredAt: initial.clock, mood: "okay", body: "well", note: "historical", taskId: "task-bp", revision: 1 });
+      initial.tasks[0].workflowRevision = 1;
+      initial.tasks[0].sourceRecordIds.push("history-check");
+      initial.tasks[0].completionHistory = [{ checkInId: "history-check", checkInRevision: 1, measurementId: "bp-16", episodeId: "episode-dizzy", priorDisposition: "ordinary" }];
+      expect(isDemoState(initial)).toBe(true);
+      localStorage.setItem("caremate-v4", JSON.stringify(initial));
+      useAppStore.setState({ demo: initial, persistenceError: null, toast: null, activeEmergencyEpisodeId: null });
+      localStorage.failWrites = true;
+      expect(useAppStore.getState().setConsent({ patientId: "may", recipientId: "david", level: "full", categories: ["body", "measurements", "medication"] }).ok).toBe(true);
+      expect(useAppStore.getState().persistenceError).toBe("QuotaExceededError");
+      expect(useAppStore.getState().saveObservation({ ...initial.observations[0], systolic: 148, note: "UNSAVED_NOTE" }).ok).toBe(true);
+      expect(useAppStore.getState().recordContactOutcome("task-fixture-attention", "left-message", "UNSAVED_CONTACT").ok).toBe(true);
+      const local = useAppStore.getState().demo;
+      // Another local change gave this event the same revision as the remote revocation.
+      const unsaved = { ...local, context: { actorId: "david" as const, patientId: "may" as const, perspective: "caregiver" as const }, events: local.events.map(e => ({ ...e, status: "acknowledged" as const, revision: 2 })) };
+      unsaved.briefs = ["may", "david"].map(recipientId => ({ id: `collision-brief-${recipientId}`, patientId: "may", recipientId: recipientId as "may" | "david", appointmentId: "appt-gp", appointmentRevision: 1, grantRevision: recipientId === "may" ? null : 2, status: "confirmed", revision: 1, generatedAt: initial.clock, confirmedAt: initial.clock, sections: [], questions: [], sourceRecordIds: ["bp-16"], sourceRevisions: { "bp-16": 1 }, includeMood: false }));
+      useAppStore.setState({ demo: unsaved });
+      const remote = collision === "revoke" ? value(revokeConsent(initial, "grant-david")) : value(setConsent(initial, { patientId: "may", recipientId: "david", level: collision === "summary" ? "summary" : "full", categories: collision === "disjoint" ? ["mood"] : collision === "event-only" ? ["body", "measurements", "medication"] : ["body"] }));
+      remote.events = remote.events.map(e => ({ ...e, status: "revoked", revision: 2 }));
+      expect(remote.grants[0].revision).toBe(unsaved.grants[0].revision);
+      localStorage.values.set("caremate-v4", JSON.stringify(remote));
+      if (entry === "refresh") useAppStore.getState().syncFromStorage();
+      else { localStorage.failWrites = false; useAppStore.getState().persistNow(); }
+      const merged = useAppStore.getState().demo;
+      expect(merged.context).toEqual(unsaved.context);
+      expect(merged.observations).toEqual(unsaved.observations);
+      expect(merged.tasks).toEqual(unsaved.tasks);
+      expect(merged.checkIns).toEqual(unsaved.checkIns);
+      expect(merged.healthRecords).toEqual(unsaved.healthRecords);
+      const projection = selectSharingProjection(merged, "may", "david");
+      const exported = sharedExportText(merged, "may", "david", "en");
+      if (collision === "revoke" || collision === "disjoint") {
+        expect(projection.status).toBe("revoked"); expect(exported.ok).toBe(false); expect(projection.records).toEqual([]);
+      } else if (collision !== "event-only") {
+        expect(projection.categories).toEqual(["body"]); expect(projection.level).toBe(collision === "summary" ? "summary" : "full");
+        expect(value(exported)).not.toContain("mmHg"); expect(value(exported)).not.toContain("Atorvastatin");
+      }
+      expect(merged.events[0].status).toBe("revoked");
+      expect(projection.events).toEqual([]);
+      expect(merged.briefs[0]).toEqual(unsaved.briefs[0]);
+      expect(merged.briefs[1].status).toBe(collision === "event-only" ? "confirmed" : "draft");
+      // Recovery must persist the restrictive result, never resurrect the unsaved active snapshot.
+      localStorage.failWrites = false; useAppStore.getState().persistNow();
+      const saved: DemoState = JSON.parse(localStorage.getItem("caremate-v4")!);
+      expect(saved.grants).toEqual(merged.grants); expect(saved.events).toEqual(merged.events);
+      expect(saved.tasks).toEqual(unsaved.tasks); expect(saved.observations).toEqual(unsaved.observations);
+      expect(useAppStore.getState().persistenceError).toBeNull();
+      expect(sharedExportText(saved, "may", "david", "en")).toEqual(exported);
+      // A stale same-revision full snapshot cannot widen the already-resolved view,
+      // even when the tab is healthy. Repeated refresh is idempotent.
+      localStorage.values.set("caremate-v4", JSON.stringify(unsaved));
+      useAppStore.getState().syncFromStorage();
+      expect(selectSharingProjection(useAppStore.getState().demo, "may", "david")).toEqual(projection);
+      useAppStore.getState().syncFromStorage();
+      expect(selectSharingProjection(useAppStore.getState().demo, "may", "david")).toEqual(projection);
+      // A subsequent explicit May decision receives a higher revision and can regrant.
+      useAppStore.setState({ demo: { ...useAppStore.getState().demo, context: initial.context } });
+      expect(useAppStore.getState().setConsent({ patientId: "may", recipientId: "david", level: "full", categories: ["measurements"] }).ok).toBe(true);
+      expect(selectSharingProjection(useAppStore.getState().demo, "may", "david").observations.length).toBeGreaterThan(0);
+      expect(useAppStore.getState().demo.grants[0].revision).toBe(3);
+    } finally {
+      useAppStore.setState(priorStore, true);
+      if (priorWindow) Object.defineProperty(globalThis, "window", priorWindow); else Reflect.deleteProperty(globalThis, "window");
+    }
+  });
+}
