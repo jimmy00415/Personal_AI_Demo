@@ -11,13 +11,15 @@ const value = (result: ActionResult<DemoState>) => { expect(result.ok).toBe(true
 const snapshot = (page: Page): Promise<DemoState> => page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!));
 
 async function start(page: Page, scenario: Parameters<typeof createScenario>[0], path = "/care") {
-  await page.addInitScript(demo => { if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(demo)); }, createScenario(scenario));
+  await page.addInitScript(demo => { if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
+    if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(demo)); }, createScenario(scenario));
   await page.goto(path);
 }
 test("custom_0915_is_identical_in_receipt_task_today_and_ics", async ({ page }) => {
   const demo = createScenario("dizziness");
   demo.episodes[0] = { ...demo.episodes[0], saved: true, disposition: "ordinary", phase: "summary_saved", step: "saved" };
-  await page.addInitScript(d => { if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(d)); }, demo);
+  await page.addInitScript(d => { if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
+    if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(d)); }, demo);
   await page.goto("/brief");
   await page.getByLabel("提醒時間（香港時間）").fill("09:15");
   await page.getByTestId("follow-pick").click();
@@ -143,7 +145,8 @@ test("hk_midnight_and_past_snooze_are_consistent_in_foreign_browser_timezone", a
   try {
     const demo = createScenario("routine-day"); demo.clock = "2026-09-16T23:59:00+08:00";
     demo.tasks.find(t => t.id === "task-amlo")!.status = "pending";
-    await page.addInitScript(d => { if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(d)); }, demo);
+    await page.addInitScript(d => { if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
+    if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(d)); }, demo);
     await page.goto("/");
     await expect(page.getByTestId("today-page")).toContainText("9月16日");
     const at = "2026-09-17T09:15:00+08:00";
@@ -312,7 +315,8 @@ test("midnight_resumed_task_draft_preserves_history_and_offers_current_confirmed
   const state = createScenario("next-morning"); state.clock = "2026-09-17T23:59:00+08:00";
   state.drafts.push({ id: "draft-followup-task-morning-1", patientId: "may", occurredAt: state.clock, mood: "low", body: "dizzy", followupChange: "worse", note: "昨晚尚未確認的補充", taskId: "task-morning", step: "review", revision: 3 });
   state.clock = "2026-09-18T00:01:00+08:00";
-  await page.addInitScript(d => { if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(d)); }, state);
+  await page.addInitScript(d => { if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
+    if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(d)); }, state);
   await page.goto("/check-in?draft=draft-followup-task-morning-1");
   await expect(page.getByTestId("checkin-review")).toContainText("昨晚尚未確認的補充");
   await page.getByTestId("task-current-checkin").click();

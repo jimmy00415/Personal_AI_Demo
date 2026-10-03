@@ -1,6 +1,6 @@
 import { messages } from "../i18n";
 import { helpInputs, emptyAnswers } from "./fixtures";
-import type { DemoState, HealthEpisode, LocalAssistantContext, LocalAssistantReply } from "./types";
+import type { DemoState, HealthEpisode, LocalAssistantContext, LocalAssistantReply, Localized } from "./types";
 
 const normalise = (text: string) => text.trim().toLowerCase().replace(/[。.!！?？]+$/, "").replace(/\s+/g, " ");
 export function getHelpDisposition(input: string): "physical" | "emotional" | null {
@@ -8,9 +8,20 @@ export function getHelpDisposition(input: string): "physical" | "emotional" | nu
   for (const kind of ["emotional", "physical"] as const) if (helpInputs[kind].some(example => normalise(example) === text)) return kind;
   return null;
 }
+/** A bounded local discovery question, not a catch-all for medication or symptom prose. */
+export function isMemoryQuestion(input: string) { return ["康伴記住甚麼", "康伴記住什麼", "what do you remember", "what does caremate remember"].includes(normalise(input)); }
 /** Rechecking help is not itself evidence of a physical symptom. Use retained patient sources. */
 export function hasSymptomContext(state: DemoState, episode: HealthEpisode | null | undefined): boolean {
   return !!episode && episode.sourceRecordIds.some(id => state.healthRecords.some(record => record.id === id && record.patientId === episode.patientId && record.category === "body" && record.kind === "symptom" && !record.supersededByRecordId));
+}
+/** Only a previously emitted personalisation explanation can be refreshed in the UI. */
+export function isMemoryExplanation(text: Localized) {
+  return text.en.startsWith(messages["memory.context"].en) || text.en === messages["memory.empty"].en;
+}
+export function getMemoryExplanation(context: LocalAssistantContext) {
+  if (context.context.actorId !== "may" || context.context.perspective !== "patient") return messages["demo.sharedPending"];
+  const active = context.memories.filter(m => m.enabled && m.patientId === context.context.patientId);
+  return active.length ? { zh: `${messages["memory.context"].zh}\n${active.map(m => m.value.zh).join("\n")}`, en: `${messages["memory.context"].en}\n${active.map(m => m.value.en).join("\n")}` } : messages["memory.empty"];
 }
 export function getLocalAssistantReply(input: string, context: LocalAssistantContext): LocalAssistantReply {
   const reply = (intent: LocalAssistantReply["intent"], text: LocalAssistantReply["text"], nextAction: LocalAssistantReply["nextAction"], disposition: LocalAssistantReply["disposition"] = "continue", nextPath: string | null = null): LocalAssistantReply => ({ intent, text, nextAction, disposition, nextPath, question: null });
@@ -20,6 +31,7 @@ export function getLocalAssistantReply(input: string, context: LocalAssistantCon
   const disposition = context.episode?.disposition;
   if (disposition === "uncertain" || disposition === "worsening") return reply("symptom", messages[disposition === "uncertain" ? "ask.uncertainHelp" : "ask.worseAdvice"], "brief", disposition, "/brief");
   const text = input.trim();
+  if (isMemoryQuestion(text)) return reply("question", getMemoryExplanation(context), "question", "continue", "/memory");
   if (/低落|壓力|難過|feeling low|stressed|sad/i.test(text)) return reply("mood", messages["local.mood"], "check-in", "continue", "/check-in");
   if (/服藥|食藥|medicine|medication|dose/i.test(text)) {
     const dose = (context.episode?.answers.medGap || /14/.test(text) ? context.medicationDoses?.find(d => d.patientId === context.context.patientId && d.id === "dose-ator-14") : undefined) ?? context.medicationDoses?.filter(d => d.patientId === context.context.patientId && Date.parse(d.scheduledAt) <= Date.parse(context.clock)).at(-1);

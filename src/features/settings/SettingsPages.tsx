@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
 import type { SceneId } from "@/lib/types";
 import { Button } from "@/components/system";
+import { HealthPage } from "@/features/health/HealthPage";
+import { CarePage } from "@/features/care/CarePage";
+import { SharingPage } from "@/features/sharing/SharingPage";
 import { scenarioIds } from "@/lib/demo/scenarios";
 
 export function SettingsPage() {
@@ -19,18 +22,19 @@ export function SettingsPage() {
       <h1 className="text-[30px]">{t("settings.title")}</h1>
       <h2 className="mt-8 text-[13px] text-ink-soft">{t("nav.language")}</h2>
       <div className="mt-2 flex gap-2">
-        <Button variant={locale === "zh-HK" ? "primary" : "secondary"} onClick={() => setLocale("zh-HK")}>
+        <Button aria-pressed={locale === "zh-HK"} variant={locale === "zh-HK" ? "primary" : "secondary"} onClick={() => setLocale("zh-HK")}>
           {t("lang.zh")}
         </Button>
-        <Button data-testid="lang-en-settings" variant={locale === "en" ? "primary" : "secondary"} onClick={() => setLocale("en")}>
+        <Button aria-pressed={locale === "en"} data-testid="lang-en-settings" variant={locale === "en" ? "primary" : "secondary"} onClick={() => setLocale("en")}>
           {t("lang.en")}
         </Button>
       </div>
       <h2 className="mt-8 text-[13px] text-ink-soft">{t("nav.display")}</h2>
-      <Button data-testid="lite-toggle-settings" className="mt-2" variant={liteMode ? "primary" : "secondary"} onClick={() => setLiteMode(!liteMode)}>
+      <Button aria-pressed={liteMode} data-testid="lite-toggle-settings" className="mt-2" variant={liteMode ? "primary" : "secondary"} onClick={() => setLiteMode(!liteMode)}>
         {liteMode ? t("lite.on") : t("lite.off")}
       </Button>
-      <Link href="/sharing" className="mt-6 flex min-h-11 items-center text-brand">{t("sharing.title")}</Link>
+      <Link href="/memory" className="mt-6 flex min-h-11 items-center text-brand">{t("nav.memory")}</Link>
+      <Link href="/sharing" className="mt-3 flex min-h-11 items-center text-brand">{t("sharing.title")}</Link>
       <h2 className="mt-8 text-[13px] text-ink-soft">{t("settings.data")}</h2>
       <p className="measure mt-2 text-[15px] text-ink-muted">{t("settings.dataBody")}</p>
       {confirmClear ? (
@@ -77,7 +81,7 @@ export function AboutPage() {
 }
 
 export function PrivacyPage() {
-  return <AboutPage />;
+  return <SharingPage />;
 }
 
 export function CareTeamPage() {
@@ -85,11 +89,12 @@ export function CareTeamPage() {
 }
 
 export function RecordsPage() {
-  return <AboutPage />;
+  useEffect(() => { useAppStore.getState().setHealthTab("records"); }, []);
+  return <HealthPage />;
 }
 
 export function MedicationsPage() {
-  return <AboutPage />;
+  return <Suspense fallback={null}><CarePage /></Suspense>;
 }
 
 export function DevPage() {

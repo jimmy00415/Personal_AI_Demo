@@ -1,5 +1,5 @@
 import { clockParts } from "../clock";
-import type { ActorId, CareTask, DemoContext, DemoState, PatientId, TodayView } from "./types";
+import type { ActionResult, ActorId, CareTask, DemoContext, DemoState, Localized, PatientId, TodayView } from "./types";
 
 export function isTaskOverdue(state: DemoState, task: CareTask) {
   return task.status !== "completed" && task.status !== "cancelled" && task.scheduledAt !== null && Date.parse(task.scheduledAt) < Date.parse(state.clock);
@@ -46,4 +46,24 @@ export function selectToday(state: DemoState): TodayView {
         : appointment ? { kind: "prepare-visit", sourceId: appointment.id, href: "/brief" }
           : { kind: "routine", sourceId: null, href: "/check-in" };
   return { patientId, hero, tasks, dailyEntry: { patientId, href: "/check-in", draftId: state.drafts.find(d => d.patientId === patientId && d.taskId === null && clockParts(d.occurredAt).dateKey === clockParts(state.clock).dateKey)?.id ?? null } };
+}
+
+/** Personalisation is patient-only; disabling it never removes a clinical source. */
+export function selectActiveMemories(state: DemoState) {
+  return state.context.actorId === "may" ? state.memories.filter(m => m.patientId === state.context.patientId && m.enabled) : [];
+}
+export function setMemoryUse(state: DemoState, memoryId: string, enabled: boolean): ActionResult<DemoState> {
+  if (state.context.actorId !== "may") return { ok: false, code: "patient-only" };
+  const item = state.memories.find(m => m.id === memoryId && m.patientId === state.context.patientId);
+  if (!item) return { ok: false, code: "memory-missing" };
+  return { ok: true, value: item.enabled === enabled ? state : { ...state, memories: state.memories.map(m => m === item ? { ...m, enabled, revision: m.revision + 1 } : m) } };
+}
+export function correctMemory(state: DemoState, memoryId: string, value: Localized): ActionResult<DemoState> {
+  if (state.context.actorId !== "may") return { ok: false, code: "patient-only" };
+  const item = state.memories.find(m => m.id === memoryId && m.patientId === state.context.patientId);
+  if (!item) return { ok: false, code: "memory-missing" };
+  const trimmed = { zh: value.zh.trim(), en: value.en.trim() };
+  if (!trimmed.zh || !trimmed.en || trimmed.zh.length > 500 || trimmed.en.length > 500) return { ok: false, code: "invalid-memory" };
+  if (item.value.zh === trimmed.zh && item.value.en === trimmed.en && !item.pendingConfirm) return { ok: true, value: state };
+  return { ok: true, value: { ...state, memories: state.memories.map(m => m === item ? { ...m, value: trimmed, pendingConfirm: false, revision: m.revision + 1 } : m) } };
 }

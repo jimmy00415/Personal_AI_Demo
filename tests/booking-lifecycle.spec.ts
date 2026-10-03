@@ -6,7 +6,8 @@ import { isDemoState } from "../src/lib/demo/persistence";
 
 const snapshot = (page: Page): Promise<DemoState> => page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!));
 async function start(page: Page, demo = createScenario("routine-day")) {
-  await page.addInitScript(d => { if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(d)); }, demo);
+  await page.addInitScript(d => { if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
+    if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(d)); }, demo);
   await page.goto("/book");
 }
 test("booking_review_can_change_cancel_and_resume", async ({ page }) => {

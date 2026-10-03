@@ -5,7 +5,8 @@ import type { DemoState } from "../src/lib/demo/types";
 const snapshot = (page: Page): Promise<DemoState> => page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!));
 async function start(page: Page, demo = createScenario("day-before-visit"), path = "/brief") {
   demo.clock = "2026-09-21T09:00:00+08:00";
-  await page.addInitScript(d => { if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(d)); }, demo);
+  await page.addInitScript(d => { if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
+    if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(d)); }, demo);
   await page.goto(path);
 }
 async function replace(page: Page, demo: DemoState) {

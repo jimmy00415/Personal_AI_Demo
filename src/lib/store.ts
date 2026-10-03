@@ -34,7 +34,7 @@ import { setAppointment, cancelAppointment, createAccompanyTask, completePersona
 import { createCheckInDraft, updateCheckInDraft, commitCheckIn, saveObservation } from "./demo/check-in";
 import { createScenario } from "./demo/scenarios";
 import { loadDemo, saveDemo, loadPreferences, savePreferences, getEmergencySession, setEmergencySession } from "./demo/persistence";
-import { selectContext } from "./demo/selectors";
+import { selectContext, selectActiveMemories, setMemoryUse, correctMemory } from "./demo/selectors";
 import { applyLegacyPatch, projectLegacy, currentEpisode } from "./demo/legacy";
 import { bindDemoReader } from "./seed";
 import { clinicSlots, emptyAnswers } from "./seed";
@@ -116,6 +116,9 @@ interface Actions {
   resetDemo: () => void;
   hydrate: () => void;
   persistNow: () => void;
+  completeIntro: () => void;
+  setMemoryUse: (id: string, enabled: boolean) => ActionResult<void>;
+  correctMemory: (id: string, value: Localized) => ActionResult<void>;
   setLocale: (locale: Locale) => void;
   setLiteMode: (on: boolean) => void;
   setViewingPerson: (id: PersonId) => void;
@@ -563,6 +566,9 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     if (!persistenceError) savePersisted(get());
   },
   persistNow: () => savePersisted(get()),
+  completeIntro: () => { set({ introComplete: true }); savePersisted(get()); },
+  setMemoryUse: (id, enabled) => { get().syncFromStorage(); return applyCare(setMemoryUse(get().demo, id, enabled)); },
+  correctMemory: (id, value) => { get().syncFromStorage(); return applyCare(correctMemory(get().demo, id, value)); },
   setLocale: (locale) => {
     set({ locale });
     setDocumentPreferences();
@@ -804,7 +810,7 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     if (!trimmed || get().demo.context.actorId !== "may") return;
     const demo = ensureAssistantSession(get().demo);
     const episode = currentEpisode(demo)!;
-    const reply = getLocalAssistantReply(trimmed, { context: demo.context, clock: demo.clock, locale: get().locale, episode, records: demo.healthRecords, memories: demo.memories, reports: demo.reports, medicationDoses: demo.medicationDoses });
+    const reply = getLocalAssistantReply(trimmed, { context: demo.context, clock: demo.clock, locale: get().locale, episode, records: demo.healthRecords, memories: selectActiveMemories(demo), reports: demo.reports, medicationDoses: demo.medicationDoses });
     const withMessages: DemoState = { ...demo, assistantSessions: demo.assistantSessions.map(s => s.episodeId === episode.id ? { ...s, draft: reply.disposition === "urgent" ? trimmed : "", messages: [...s.messages, { id: chatId("u-free"), role: "user", text: { zh: trimmed, en: trimmed } }, { id: chatId("a-free"), role: "assistant", text: reply.text }] } : s) };
     if (reply.disposition === "urgent") {
       set({ demo: interruptForHelp(withMessages, getHelpDisposition(trimmed) ?? episode.helpKind ?? "physical"), activeEmergencyEpisodeId: episode.id, pendingPath: "/help", toast: null });
@@ -850,19 +856,14 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
   // Recording tasks require their specific confirmation action; a generic click is not evidence.
   completeTask: () => {},
   excludeMemory: (id) => {
-    set({
-      memories: get().memories.map((m) => (m.id === id ? { ...m, excluded: true } : m)),
-      forgetId: null,
-    });
-    get().showToast(get().locale === "en" ? "Your records were updated" : "已更新你的紀錄");
-    savePersisted(get());
+    const result = get().setMemoryUse(id, false);
+    if (!result.ok) return;
+    set({ forgetId: null });
+    get().showToast(translate(get().persistenceError ? "storage.memoryOnly" : "memory.updated", get().locale));
   },
   confirmMemory: (id) => {
-    set({
-      memories: get().memories.map((m) => (m.id === id ? { ...m, pendingConfirm: false } : m)),
-    });
-    get().showToast(get().locale === "en" ? "Your records were updated" : "已更新你的紀錄");
-    savePersisted(get());
+    const item = get().demo.memories.find(m => m.id === id);
+    if (item) get().correctMemory(id, item.value);
   },
   stopSharing: () => {
     const grant = get().demo.grants.find(g => g.recipientId === "david");

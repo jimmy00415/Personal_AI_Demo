@@ -7,8 +7,8 @@ const fail = (code: string): ActionResult<never> => ({ ok: false, code });
 const join = (lines: Localized[]): Localized => ({ zh: lines.map(l => l.zh).join("\n"), en: lines.map(l => l.en).join("\n") });
 const literal = (value: string): Localized => ({ zh: value, en: value });
 const stamped = (text: Localized, occurredAt: string, source?: string, enteredAt?: string): Localized => ({
-  zh: `${text.zh} · ${formatDateTime(occurredAt, "zh-HK")}${source ? ` · ${source}` : ""}${enteredAt ? ` / ${formatDateTime(enteredAt, "zh-HK")}` : ""}`,
-  en: `${text.en} · ${formatDateTime(occurredAt, "en")}${source ? ` · ${source}` : ""}${enteredAt ? ` / ${formatDateTime(enteredAt, "en")}` : ""}`,
+  zh: `${text.zh} · ${formatDateTime(occurredAt, "zh-HK")}${source ? ` · ${source}` : ""}${enteredAt && enteredAt !== occurredAt ? ` / ${formatDateTime(enteredAt, "zh-HK")}` : ""}`,
+  en: `${text.en} · ${formatDateTime(occurredAt, "en")}${source ? ` · ${source}` : ""}${enteredAt && enteredAt !== occurredAt ? ` / ${formatDateTime(enteredAt, "en")}` : ""}`,
 });
 const provenance = (source: "user" | "home-measure" | "imported" | "organised") => source === "home-measure" ? messages["source.home"] : messages[`source.${source}`];
 function sourced(text: Localized, occurredAt: string, source: Parameters<typeof provenance>[0], enteredAt?: string) {
@@ -128,5 +128,5 @@ export function prepareBriefExport(state: DemoState, briefId: string, recipientI
 }
 export function briefToText(packet: BriefPacket, locale: Locale): string {
   const L = (text: Localized) => locale === "en" ? text.en : text.zh;
-  return [L(messages["packet.title"]), `${L(messages["packet.patient"])} · ${packet.patientId}`, `${L(messages[packet.status === "confirmed" ? "packet.confirmed" : "packet.draft"])} · ${L(messages["packet.revision"])} ${packet.revision}`, `${L(messages["packet.updated"])} · ${formatDateTime(packet.generatedAt, locale)}`, packet.recipientId === "may" ? L(messages["packet.personal"]) : L(messages[`sharing.${packet.recipientId}`]), ...packet.sections.flatMap(s => ["", L(s.title), L(s.text)]), "", L(messages["brief.s6"]), ...packet.questions.map(q => `• ${L(q.text)}`), "", L(messages["packet.local"])].join("\n");
+  return [L(messages["packet.title"]), `${L(messages["packet.patient"])} · ${L(messages["ask.person"])}`, `${L(messages[packet.status === "confirmed" ? "packet.confirmed" : "packet.draft"])} · ${L(messages["packet.revision"])} ${packet.revision}`, `${L(messages["packet.updated"])} · ${formatDateTime(packet.generatedAt, locale)}`, packet.recipientId === "may" ? L(messages["packet.personal"]) : L(messages[`sharing.${packet.recipientId}`]), ...packet.sections.flatMap(s => ["", L(s.title), L(s.text)]), "", L(messages["brief.s6"]), ...packet.questions.map(q => `• ${L(q.text)}`), "", L(messages["packet.local"])].join("\n");
 }

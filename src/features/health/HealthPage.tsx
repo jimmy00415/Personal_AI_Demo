@@ -48,6 +48,7 @@ export function HealthPage() {
             key={item.id}
             type="button"
             data-testid={`health-tab-${item.id}`}
+            aria-pressed={tab === item.id}
             onClick={() => setHealthTab(item.id)}
             className={`min-h-11 flex-1 rounded-full px-3 text-[13px] ${tab === item.id ? "bg-surface text-ink" : "text-ink-muted"}`}
           >

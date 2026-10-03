@@ -7,6 +7,7 @@ import { useAppStore } from "../src/lib/store";
 
 async function start(page: Page, path = "/check-in") {
   await page.addInitScript((demo) => {
+    if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
     if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(demo));
   }, createScenario("routine-day"));
   await page.goto(path);
@@ -154,6 +155,7 @@ test("historical_correction_selects_requested_draft_and_restores_with_competing_
   const state = createScenario("routine-day");
   state.checkIns.push({ id: "checkin-yesterday", patientId: "may", draftId: "draft-yesterday", occurredAt: "2026-09-15T08:00:00+08:00", enteredAt: "2026-09-15T08:00:00+08:00", mood: "low", body: "tired", note: "昨天的補充", revision: 1 });
   await page.addInitScript(demo => {
+    if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
     if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(demo));
   }, state);
   await page.goto("/check-in");

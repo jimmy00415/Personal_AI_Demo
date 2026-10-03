@@ -5,7 +5,7 @@ test.describe.configure({ timeout: 60_000 });
 async function clearWorld(page: import("@playwright/test").Page) {
   await page.addInitScript(() => {
     localStorage.removeItem("caremate-v4");
-    localStorage.removeItem("caremate-v4-preferences");
+    if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
     sessionStorage.removeItem("caremate-v4-emergency");
   });
 }

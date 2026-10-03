@@ -65,6 +65,7 @@ function PacketReview({ packet }: { packet: BriefPacket }) {
     router.push(`/print?brief=${encodeURIComponent(result.value.id)}`);
   }
   return <>
+    <section data-testid="brief-key-facts" className="rounded-xl bg-brand-soft p-4"><h2 className="headline">{t("packet.keyFacts")}</h2><dl className="mt-3 space-y-3">{packet.sections.filter(s => ["body", "average", "medication", "allergy", "appointment"].includes(s.id)).map(s => <div key={s.id}><dt className="font-medium">{L(s.title)}</dt><dd className="mt-1 text-ink-muted">{L(s.text).split("\n").slice(0, s.id === "medication" ? 3 : 1).join(" · ")}</dd></div>)}</dl></section>
     <div className="rounded-xl border border-line bg-surface p-4">
       <p data-testid="brief-status" role="status">{t(packet.status === "confirmed" ? "packet.confirmed" : "packet.draft")}</p>
       <p>{t("packet.revision")} {packet.revision} · {t("packet.updated")} {formatDateTime(packet.generatedAt, locale)}</p>

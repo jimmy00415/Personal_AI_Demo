@@ -29,7 +29,7 @@ export function SharingPreview({ projection, interactive = false, eventId }: { p
     <p>{t("sharing.identity")}</p>
     {!active ? <p data-testid="shared-empty">{t("sharing.empty")}</p> : <>
       <p>{t(`sharing.${projection.level!}`)}</p>
-      {projection.summary.map((s, i) => <p key={i}>{L(s)}</p>)}
+      {projection.summary.map((s, i) => <p key={i}>{projection.categories.includes("body") && i === 0 ? `${t("sharing.body")}: ` : projection.categories.includes("mood") && i === (projection.categories.includes("body") ? 1 : 0) ? `${t("sharing.mood")}: ` : ""}{L(s)}</p>)}
       {projection.level === "alerts-only" && !projection.events.length ? <p>{interactive ? t("sharing.noAlerts") : `${t("sharing.alertExample")}: ${t("sharing.neutral")}`}</p> : null}
       {projection.events.map(e => <article key={e.id} data-testid={`shared-event-${e.id}`} className="space-y-3 rounded-xl border border-line p-4"><p>{L(e.text)}</p><time dateTime={e.occurredAt}>{formatDateTime(e.occurredAt, locale)}</time><p>{t(`events.${e.status}`)}</p>{interactive && mayAccompany ? <Button data-testid={`event-open-${e.id}`} onClick={() => { useAppStore.getState().syncFromStorage(); router.push(`/notifications?event=${encodeURIComponent(e.id)}`); }}>{t("events.open")}</Button> : null}</article>)}
       {detail ? <>

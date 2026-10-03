@@ -1,0 +1,36 @@
+import { expect, test } from '@playwright/test';
+import { createScenario } from '../src/lib/demo/scenarios';
+import { useAppStore } from '../src/lib/store';
+import { getLocalAssistantReply } from '../src/lib/demo/local-assistant';
+import { buildBrief } from '../src/lib/demo/brief';
+test('memory canonical correction changes context and brief without changing source records', () => {
+  const state = createScenario('routine-day');
+  useAppStore.setState({ demo: state });
+  expect(typeof useAppStore.getState().correctMemory).toBe('function');
+  const changed = useAppStore.getState().correctMemory('mem-pen', { zh: '更正的資料', en: 'Corrected patient note' });
+  expect(changed.ok).toBe(true);
+  const next = useAppStore.getState().demo;
+  expect(next.healthRecords).toEqual(state.healthRecords); expect(next.reports).toEqual(state.reports);
+  const brief = buildBrief(next, 'may', { appointmentId: 'appt-gp', includeMood: true });
+  expect(brief.ok && brief.value.sections.find(s => s.id === 'allergy')?.text.en).toContain('Corrected patient note');
+  const context = { context: next.context, clock: next.clock, locale: 'en' as const, episode: null, memories: next.memories, reports: next.reports, records: next.healthRecords };
+  expect(getLocalAssistantReply('What do you remember?', context).text.en).toContain('Corrected patient note');
+  expect(useAppStore.getState().setMemoryUse('mem-pen', false).ok).toBe(true);
+  const excludedBrief = buildBrief(useAppStore.getState().demo, 'may', { appointmentId: 'appt-gp', includeMood: true });
+  expect(excludedBrief.ok && excludedBrief.value.sections.find(s => s.id === 'allergy')?.text.en).toContain('Corrected patient note');
+  expect(getLocalAssistantReply('What do you remember?', { ...context, memories: useAppStore.getState().demo.memories }).text.en).not.toContain('Corrected patient note');
+});
+test('memory mutations reject caregiver, empty corrections and unknown ids; duplicate writes preserve revisions', () => {
+  useAppStore.setState({ demo: createScenario('routine-day') });
+  expect(typeof useAppStore.getState().setMemoryUse).toBe('function');
+  expect(useAppStore.getState().correctMemory('mem-pen', { zh: '', en: '' }).ok).toBe(false);
+  expect(useAppStore.getState().setMemoryUse('missing', false).ok).toBe(false);
+  useAppStore.getState().setMemoryUse('mem-pen', false);
+  const revision = useAppStore.getState().demo.memories[0].revision;
+  useAppStore.getState().setMemoryUse('mem-pen', false);
+  expect(useAppStore.getState().demo.memories[0].revision).toBe(revision);
+  const state = useAppStore.getState().demo;
+  useAppStore.setState({ demo: { ...state, context: { actorId: 'david', patientId: 'may', perspective: 'caregiver' } } });
+  expect(useAppStore.getState().correctMemory('mem-pen', { zh: '私人', en: 'private' }).ok).toBe(false);
+  expect(useAppStore.getState().setMemoryUse('mem-pen', true).ok).toBe(false);
+});

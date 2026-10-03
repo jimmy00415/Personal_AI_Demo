@@ -8,7 +8,8 @@ import { createAccompanyTask } from "../src/lib/demo/care";
 import type { DemoState } from "../src/lib/demo/types";
 
 async function start(page: Page, demo = createScenario("share-needed"), path = "/sharing") {
-  await page.addInitScript(d => { if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(d)); }, demo);
+  await page.addInitScript(d => { if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
+    if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(d)); }, demo);
   await page.goto(path);
 }
 test("permission_levels_have_exact_allowed_content", async ({ page }) => {

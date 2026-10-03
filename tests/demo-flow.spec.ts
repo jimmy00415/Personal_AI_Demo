@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 test.describe.configure({ mode: "serial", timeout: 60_000 });
 
 async function reset(page: import("@playwright/test").Page) {
+  await page.addInitScript(() => { if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true })); });
   await page.goto("/dev");
   await page.getByTestId("demo-reset").click();
   await expect(page.getByTestId("today-page")).toBeVisible({ timeout: 5000 });
@@ -14,7 +15,7 @@ test("main journey: dizziness, med gap, brief, follow-up, next morning", async (
       if (sessionStorage.getItem("caremate-test-initialised")) return;
       sessionStorage.setItem("caremate-test-initialised", "1");
       localStorage.removeItem("caremate-v4");
-      localStorage.removeItem("caremate-v4-preferences");
+      if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
       sessionStorage.removeItem("caremate-v4-emergency");
     });
   await reset(page);
@@ -108,7 +109,7 @@ test("follow-up declined does not create reminder", async ({ page }) => {
       if (sessionStorage.getItem("caremate-test-initialised")) return;
       sessionStorage.setItem("caremate-test-initialised", "1");
       localStorage.removeItem("caremate-v4");
-      localStorage.removeItem("caremate-v4-preferences");
+      if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
       sessionStorage.removeItem("caremate-v4-emergency");
     });
   await reset(page);
@@ -150,7 +151,7 @@ test("family context does not expose unshared records or change the active actor
 test("agent books earlier visit from known records", async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.removeItem("caremate-v4");
-    localStorage.removeItem("caremate-v4-preferences");
+    if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
     sessionStorage.removeItem("caremate-v4-emergency");
   });
   await reset(page);
@@ -178,7 +179,7 @@ test("agent books earlier visit from known records", async ({ page }) => {
   await page.getByTestId("nav-care").click();
   await expect(page.getByTestId("follow-appt-row")).toContainText("9月17日");
   await page.getByTestId("nav-today").click();
-  await expect(page.getByTestId("daily-brief")).toContainText("覆診已改期");
+  await expect(page.getByTestId("daily-brief")).toContainText("本地覆診行程已更新");
 });
 
 test("urgent branch blocks routine completion", async ({ page }) => {
@@ -186,7 +187,7 @@ test("urgent branch blocks routine completion", async ({ page }) => {
       if (sessionStorage.getItem("caremate-test-initialised")) return;
       sessionStorage.setItem("caremate-test-initialised", "1");
       localStorage.removeItem("caremate-v4");
-      localStorage.removeItem("caremate-v4-preferences");
+      if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
       sessionStorage.removeItem("caremate-v4-emergency");
     });
   await page.goto("/ask");
@@ -210,6 +211,7 @@ test("no horizontal overflow on compact phones", async ({ page }) => {
 });
 
 test("language, larger text, and refresh persist", async ({ page }) => {
+  await page.addInitScript(() => { if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true })); });
   await page.goto("/settings");
   await page.getByTestId("lang-en-settings").click();
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();

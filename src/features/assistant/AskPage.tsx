@@ -8,7 +8,7 @@ import { formatDate, formatTime } from "@/lib/clock";
 import { addMinutes } from "@/lib/clock";
 import { bpAverage, symptomLine } from "@/lib/selectors";
 import { Button } from "@/components/system";
-import { getLocalAssistantReply, hasSymptomContext } from "@/lib/demo/local-assistant";
+import { getLocalAssistantReply, getMemoryExplanation, hasSymptomContext, isMemoryQuestion, isMemoryExplanation } from "@/lib/demo/local-assistant";
 import { EmergencyHelp } from "./EmergencyHelp";
 
 const urgentOpts = [
@@ -37,7 +37,7 @@ const medOpts = [
 ];
 
 export function AskPage() {
-  const { t, locale } = useI18n();
+  const { t, L, locale } = useI18n();
   const step = useAppStore((s) => s.step);
   const messages = useAppStore((s) => s.messages);
   const answers = useAppStore((s) => s.answers);
@@ -55,7 +55,9 @@ export function AskPage() {
   const session = demo.assistantSessions.find(s => s.episodeId === episode?.id);
   const draft = session?.draft ?? "";
   const lastInput = session?.messages.filter(m => m.role === "user" && m.id.startsWith("u-free")).at(-1)?.text.en ?? "";
-  const reply = lastInput ? getLocalAssistantReply(lastInput, { context: demo.context, clock: demo.clock, locale, episode, records: demo.healthRecords, reports: demo.reports, memories: demo.memories, medicationDoses: demo.medicationDoses }) : null;
+  const assistantContext = { context: demo.context, clock: demo.clock, locale, episode, records: demo.healthRecords, reports: demo.reports, memories: demo.memories.filter(m => m.enabled && m.patientId === demo.context.patientId), medicationDoses: demo.medicationDoses };
+  const reply = lastInput ? getLocalAssistantReply(lastInput, assistantContext) : null;
+  const currentPersonalisation = getMemoryExplanation(assistantContext);
   const [why, setWhy] = useState(false);
   const avg = bpAverage();
 
@@ -70,13 +72,13 @@ export function AskPage() {
     <div data-testid="chat-page" className="mx-auto max-w-2xl">
       <header className="mb-6">
         <h1 className="text-[28px] leading-tight">{t(isRecheck ? "local.recheck" : symptomFlow ? "ask.title" : "local.assistantTitle")}</h1>
-        <p className="mt-1 text-[15px] text-ink-muted">{t("ask.person")}</p>
+        <p className="mt-1 text-[15px] text-ink-muted">{L(demo.profiles.find(p => p.id === demo.context.patientId)!.name)}</p>
         {symptomFlow && !isRecheck ? <p className="mt-2 text-[14px] text-ink-soft">{t("ask.context")}</p> : null}
       </header>
 
       <div className="space-y-5">
         <div className="space-y-5" data-testid="chat-log">
-          {messages.map((msg) => (
+          {messages.map((msg, index) => (
             <div key={msg.id} className={msg.role === "user" ? "flex justify-end" : ""}>
               <p
                 data-testid={msg.note ? "chat-correction" : undefined}
@@ -88,7 +90,7 @@ export function AskPage() {
                       : "measure leading-relaxed"
                 }
               >
-                {locale === "en" ? msg.text.en : msg.text.zh}
+                {L(msg.role === "assistant" && isMemoryExplanation(msg.text) && messages[index - 1]?.id.startsWith("u-free") && isMemoryQuestion(messages[index - 1].text.en) ? currentPersonalisation : msg.text)}
               </p>
             </div>
           ))}
@@ -213,7 +215,7 @@ export function AskPage() {
         </Button>
       </form>
       <div className="mt-4 flex flex-wrap gap-3" aria-live="polite">
-        {reply?.nextPath ? <Link data-testid="assistant-next" className="inline-flex min-h-11 items-center text-brand underline" href={reply.intent === "mood" ? "/brief" : reply.nextPath}>{t(reply.intent === "mood" ? "checkin.organise" : reply.nextPath === "/report" ? "nav.health" : reply.nextPath === "/care" ? "nav.follow" : reply.nextAction === "check-in" ? "checkin.title" : reply.nextAction === "question" ? "local.question" : "ask.prep")}</Link> : null}
+        {reply?.nextPath ? <Link data-testid="assistant-next" className="inline-flex min-h-11 items-center text-brand underline" href={reply.intent === "mood" ? "/brief" : reply.nextPath}>{t(reply.nextPath === "/memory" ? "nav.memory" : reply.intent === "mood" ? "checkin.organise" : reply.nextPath === "/report" ? "nav.health" : reply.nextPath === "/care" ? "nav.follow" : reply.nextAction === "check-in" ? "checkin.title" : reply.nextAction === "question" ? "local.question" : "ask.prep")}</Link> : null}
         {reply?.intent === "mood" ? <Link data-testid="assistant-record-only" className="inline-flex min-h-11 items-center text-brand underline" href="/check-in">{t("local.record")}</Link> : null}
         <Link className="inline-flex min-h-11 items-center text-brand underline" href="/health">{t("nav.health")}</Link>
       </div>

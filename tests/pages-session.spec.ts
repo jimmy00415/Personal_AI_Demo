@@ -7,6 +7,7 @@ async function clearWorld(page: Page) {
   await page.goto("/about");
   await page.evaluate(() => {
     localStorage.clear();
+    localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
     sessionStorage.clear();
   });
 }

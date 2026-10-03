@@ -12,7 +12,7 @@ import { isTaskOverdue, selectToday, selectTodayTasks } from "@/lib/demo/selecto
 
 export function TodayPage() {
   const router = useRouter();
-  const { t, locale } = useI18n();
+  const { t, L, locale } = useI18n();
   const clock = useAppStore((s) => s.clock);
   const followup = useAppStore((s) => s.followup);
   const episodeSaved = useAppStore((s) => s.episodeSaved);
@@ -42,7 +42,7 @@ export function TodayPage() {
   return (
     <div data-testid="today-page" className="mx-auto max-w-[720px]">
       <p className="text-[15px] text-ink-muted">{formatDate(clock, locale)}</p>
-      <h1 className="mt-1 text-[30px] leading-tight">{t("today.greeting")}</h1>
+      <h1 className="mt-1 text-[30px] leading-tight">{t("today.greeting")}{locale === "en" ? ", " : "，"}{L(demo.profiles.find(p => p.id === demo.context.patientId)!.name)}</h1>
       <Link href="/notifications" data-testid="today-events" className="mt-4 inline-flex min-h-11 items-center text-brand">{t("events.title")}</Link>
 
       <section data-testid="daily-brief" className="mt-8">

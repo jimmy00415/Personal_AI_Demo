@@ -9,6 +9,7 @@ import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
 import { samePath, shellLayout } from "@/lib/shell";
 import { cn } from "@/lib/utils";
+import { WelcomePage } from "@/features/welcome/WelcomePage";
 import { ToastHost } from "./system";
 
 const primary = [
@@ -29,6 +30,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const setLiteMode = useAppStore((s) => s.setLiteMode);
   const emergency = useAppStore((s) => s.phase === "urgent_help");
   const hydrated = useAppStore((s) => s.hydrated);
+  const introComplete = useAppStore(s => s.introComplete);
   const persistenceError = useAppStore((s) => s.persistenceError);
   const actorId = useAppStore((s) => s.demo.context.actorId);
   const actorName = useAppStore((s) => s.demo.profiles.find(p => p.id === s.demo.context.actorId)?.displayName ?? "");
@@ -66,13 +68,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { isActive, hideChrome, hideFab, showAskLink, bare } = shellLayout(pathname, emergency);
 
   if (!hydrated) {
-    return <div className="min-h-dvh bg-background" />;
+    return <main className="min-h-dvh bg-background p-6"><h1 className="title-1">{t("product.name")}</h1><p role="status">{t("welcome.loading")}</p></main>;
   }
 
   const storageNotice = persistenceError ? <p role="alert" data-testid="persistence-error" className="relative z-50 bg-amber-50 p-4 text-ink">{t("storage.error")}</p> : null;
   // Patient routes include mixed legacy prose. David always uses the current shared boundary.
   const sharedRoute = actorId === "david" && !["/dev", "/settings", "/about", "/sharing", "/privacy"].some(path => samePath(pathname, path));
   const content = sharedRoute ? <SharedView /> : children;
+
+  if (samePath(pathname, "/welcome") || (!introComplete && samePath(pathname, "/") && !emergency && actorId === "may")) return <><ToastHost />{storageNotice}<WelcomePage /></>;
 
   if (hideChrome) {
     return (
@@ -88,7 +92,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-dvh bg-background">
       <ToastHost />
       {storageNotice}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[72px] flex-col border-r border-line/80 bg-background px-2 py-5 md:flex lg:w-[220px] lg:px-3">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[120px] flex-col border-r border-line/80 bg-background px-2 py-5 md:flex lg:w-[220px] lg:px-3">
         <Link href="/" className="mb-8 flex items-center gap-2.5 px-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-brand text-[15px] text-white">康</span>
           <span className="hidden lg:block text-[15px]">{t("product.name")}</span>
@@ -101,11 +105,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 data-testid={item.testId}
-                aria-label={t(item.key)}
-                className={cn("nav-item flex min-h-11 items-center gap-3 rounded-[12px] px-3 text-[15px]", isActive(item.href) ? "bg-brand-soft text-brand-deep" : "text-ink-muted hover:bg-surface")}
+                aria-label={t(actorId === "david" && item.href === "/health" ? "sharing.shared" : actorId === "david" && item.href === "/care" ? "sharing.tasks" : item.key)}
+                className={cn("nav-item flex min-h-11 flex-col items-center gap-1 rounded-[12px] px-2 py-2 text-[13px] lg:flex-row lg:gap-3 lg:px-3 lg:text-[15px]", isActive(item.href) ? "bg-brand-soft text-brand-deep" : "text-ink-muted hover:bg-surface")}
               >
                 <Icon className="h-4 w-4 shrink-0" />
-                <span className="hidden lg:inline">{t(item.key)}</span>
+                <span className="inline">{t(actorId === "david" && item.href === "/health" ? "sharing.shared" : actorId === "david" && item.href === "/care" ? "sharing.tasks" : item.key)}</span>
               </Link>
             );
           })}
@@ -115,16 +119,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 href="/ask"
                 data-testid="nav-ask" aria-label={t("nav.ask")}
-                className="nav-item flex min-h-11 items-center gap-3 rounded-[12px] px-3 text-[15px] text-ink-muted hover:bg-surface"
+                className="nav-item flex min-h-11 flex-col items-center gap-1 rounded-[12px] px-2 py-2 text-[13px] lg:flex-row lg:gap-3 lg:px-3 lg:text-[15px] text-ink-muted hover:bg-surface"
               >
                 <span className="flex h-4 w-4 items-center justify-center text-[13px]">✦</span>
-                <span className="hidden lg:inline">{t("nav.ask")}</span>
+                <span className="inline">{t("nav.ask")}</span>
               </Link>
             </>
           )}
         </nav>
         <div className="relative px-1">
-          <button type="button" data-testid="profile-menu-btn" aria-label={actorName} onClick={() => setMenuOpen((v) => !v)} className="flex min-h-11 w-full items-center gap-2 rounded-[12px] px-2 text-left hover:bg-surface">
+          <button type="button" data-testid="profile-menu-btn" aria-label={actorName} aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)} className="flex min-h-11 w-full items-center gap-2 rounded-[12px] px-2 text-left hover:bg-surface">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-[11px] text-white">{actorId === "may" ? "MC" : "DC"}</span>
             <span className="hidden lg:block text-[13px]">{actorName}</span>
           </button>
@@ -139,20 +143,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     setMenuOpen(false);
                     router.push(item.href);
                   }}
-                  className="block rounded-[10px] px-3 py-2 text-[13px] hover:bg-surface-secondary"
+                  className="flex min-h-11 items-center rounded-[10px] px-3 py-2 text-[13px] hover:bg-surface-secondary"
                 >
                   {item.label}
                 </Link>
               ))}
               <div className="mt-2 flex gap-1">
-                <button type="button" className={cn("flex-1 rounded-[8px] px-2 py-1.5 text-[12px]", locale === "zh-HK" ? "bg-brand text-white" : "bg-surface-secondary")} onClick={() => setLocale("zh-HK")}>
+                <button type="button" className={cn("flex-1 min-h-11 rounded-[8px] px-2 py-1.5 text-[12px]", locale === "zh-HK" ? "bg-brand text-white" : "bg-surface-secondary")} onClick={() => setLocale("zh-HK")}>
                   {t("lang.zh")}
                 </button>
-                <button type="button" data-testid="lang-en" className={cn("flex-1 rounded-[8px] px-2 py-1.5 text-[12px]", locale === "en" ? "bg-brand text-white" : "bg-surface-secondary")} onClick={() => setLocale("en")}>
+                <button type="button" data-testid="lang-en" className={cn("flex-1 min-h-11 rounded-[8px] px-2 py-1.5 text-[12px]", locale === "en" ? "bg-brand text-white" : "bg-surface-secondary")} onClick={() => setLocale("en")}>
                   {t("lang.en")}
                 </button>
               </div>
-              <button type="button" data-testid="lite-toggle" className="mt-1 w-full rounded-[10px] px-3 py-2 text-left text-[13px]" onClick={() => setLiteMode(!liteMode)}>
+              <button type="button" data-testid="lite-toggle" className="mt-1 min-h-11 w-full rounded-[10px] px-3 py-2 text-left text-[13px]" onClick={() => setLiteMode(!liteMode)}>
                 {liteMode ? t("lite.on") : t("lite.off")}
               </button>
             </div>
@@ -160,22 +164,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <header className="sticky top-0 z-20 flex items-center justify-between bg-background px-5 py-3 md:hidden">
-        <Link href="/" className="text-[16px]">{t("product.name")}</Link>
-        <Link href="/settings" aria-label={t("nav.settings")} className="rounded-full p-2">
+      <header className="sticky top-0 z-20 flex items-center justify-between gap-2 bg-background px-5 py-3 md:hidden">
+        <Link href="/" className="flex min-h-11 min-w-11 shrink-0 items-center whitespace-nowrap text-[16px]">{t("product.name")}</Link>
+        <div className="flex min-w-0 items-center gap-2">{!hideFab ? <Link href="/ask" data-testid="fab-ask" className="flex min-h-11 items-center rounded-full bg-brand px-3 text-white">{t("nav.ask")}</Link> : null}
+        <Link href="/settings" aria-label={t("nav.settings")} className="flex min-h-11 min-w-11 items-center justify-center rounded-full p-2">
           <Settings className="h-5 w-5" />
-        </Link>
+        </Link></div>
       </header>
 
-      <main className="pb-28 md:ml-[72px] md:pb-10 lg:ml-[220px]">
+      <main className="pb-28 md:ml-[120px] md:pb-10 lg:ml-[220px]">
         <div className="mx-auto w-full max-w-[1080px] px-5 py-6 md:px-8 md:py-10">{content}</div>
       </main>
 
-      {!hideFab ? (
-        <Link href="/ask" data-testid="fab-ask" className="fixed bottom-24 right-4 z-40 flex h-12 items-center rounded-full bg-brand px-4 text-white md:hidden">
-          {t("nav.ask")}
-        </Link>
-      ) : null}
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line/80 bg-background px-2 py-2 md:hidden" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
         <div className="grid grid-cols-4 gap-1">
@@ -184,7 +184,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             return (
               <Link key={item.href} href={item.href} data-testid={`${item.testId}-mobile`} className={cn("nav-item flex min-h-11 flex-col items-center gap-1 rounded-[12px] py-2 text-[11px]", isActive(item.href) ? "text-brand-deep" : "text-ink-soft")}>
                 <Icon className="h-5 w-5" />
-                {t(item.key)}
+                {t(actorId === "david" && item.href === "/health" ? "sharing.shared" : actorId === "david" && item.href === "/care" ? "sharing.tasks" : item.key)}
               </Link>
             );
           })}
