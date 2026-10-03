@@ -8,7 +8,7 @@ import { formatDate, formatTime } from "@/lib/clock";
 import { addMinutes } from "@/lib/clock";
 import { bpAverage, symptomLine } from "@/lib/selectors";
 import { Button } from "@/components/system";
-import { getLocalAssistantReply } from "@/lib/demo/local-assistant";
+import { getLocalAssistantReply, hasSymptomContext } from "@/lib/demo/local-assistant";
 import { EmergencyHelp } from "./EmergencyHelp";
 
 const urgentOpts = [
@@ -51,7 +51,7 @@ export function AskPage() {
   const setDraft = useAppStore(s => s.setAssistantDraft);
   const episode = demo.episodes.at(-1) ?? null;
   const isRecheck = episode?.id.startsWith("episode-recheck-");
-  const symptomFlow = !!episode && (isRecheck || episode.sourceRecordIds.some(id => demo.healthRecords.some(r => r.id === id && r.kind === "symptom" && r.category === "body")));
+  const symptomFlow = hasSymptomContext(demo, episode);
   const session = demo.assistantSessions.find(s => s.episodeId === episode?.id);
   const draft = session?.draft ?? "";
   const lastInput = session?.messages.filter(m => m.role === "user" && m.id.startsWith("u-free")).at(-1)?.text.en ?? "";

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { getHelpDisposition, getLocalAssistantReply } from "../src/lib/demo/local-assistant";
+import { getHelpDisposition, getLocalAssistantReply, hasSymptomContext } from "../src/lib/demo/local-assistant";
 import { createScenario } from "../src/lib/demo/scenarios";
 import { useAppStore } from "../src/lib/store";
 import { isDemoState } from "../src/lib/demo/persistence";
@@ -133,4 +133,90 @@ test("correcting old answers removes superseded summary text", async ({ page }) 
   await page.getByTestId("ask-input").fill("medicine");
   await page.getByTestId("ask-send").click();
   await expect(page.getByTestId("chat-log")).toContainText("你已確認這次服藥");
+});
+
+test("fresh recheck can complete a current followup while retaining historical urgent records", async ({ page }) => {
+  await page.addInitScript(demo => { if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(demo)); }, createScenario("next-morning"));
+  await page.goto("/ask");
+  await page.getByTestId("ask-input").fill("I want to hurt myself now");
+  await page.getByTestId("ask-send").click();
+  await expect(page.getByTestId("emotional-help")).toBeVisible();
+  await expect(page).toHaveURL(/\/help\/?$/);
+  const historical = await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!).episodes[0]);
+  await page.evaluate(() => sessionStorage.clear());
+  await page.reload();
+  await page.getByTestId("help-recheck").locator('a[href="/ask"]').click();
+  for (const id of ["none", "just-now", "better", "forgot"]) await page.getByTestId(`quick-reply-${id}`).click();
+  await page.goto("/care?task=task-morning");
+  await page.getByTestId("task-checkin").click();
+  await page.getByTestId("mood-okay").click(); await page.getByTestId("checkin-next").click();
+  await page.getByTestId("body-dizzy").click(); await page.getByTestId("followup-still").click();
+  await page.getByTestId("checkin-next").click(); await page.getByTestId("checkin-next").click();
+  await page.getByTestId("checkin-save").click();
+  await page.getByTestId("followup-measurement").click();
+  await page.locator("#observation-sys").fill("135"); await page.locator("#observation-dia").fill("85");
+  await page.getByTestId("observation-save").click(); await page.getByTestId("followup-complete").click();
+  await expect(page.getByTestId("followup-checkin-receipt")).toContainText("已完成記錄事項");
+  await page.reload();
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!));
+  expect(saved.episodes[0]).toEqual(historical);
+  expect(saved.episodes.at(-1).disposition).toBe("uncertain");
+  expect(saved.tasks.find((t: { id: string }) => t.id === "task-morning").status).toBe("completed");
+  expect(isDemoState(saved)).toBe(true);
+});
+for (const locale of ["zh-HK", "en"] as const) for (const entry of ["ask", "check-in"] as const) {
+  test(`emotional-only fresh recheck asks current state without inventing dizziness ${locale} ${entry}`, async ({ page }) => {
+    const routine = createScenario("routine-day");
+    routine.healthRecords.push({ ...createScenario("dizziness").healthRecords.find(r => r.id === "rec-dizzy")!, id: "unrelated-earlier-symptom", occurredAt: "2026-09-01T08:35:00+08:00" });
+    await page.addInitScript(({ demo, locale }) => {
+      if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(demo));
+      localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale, liteMode: false, introComplete: true }));
+    }, { demo: routine, locale });
+    await page.goto(`/${entry}`);
+    const text = locale === "en" ? "I want to hurt myself now" : "我現在想傷害自己";
+    if (entry === "check-in") {
+      await page.getByTestId("mood-low").click(); await page.getByTestId("checkin-next").click();
+      await page.getByTestId("body-well").click(); await page.getByTestId("checkin-next").click();
+      await page.locator("#checkin-note").fill(text); await page.getByTestId("checkin-next").click();
+    } else { await page.getByTestId("ask-input").fill(text); await page.getByTestId("ask-send").click(); }
+    await expect(page.getByTestId("emotional-help")).toBeVisible();
+    await expect(page).toHaveURL(/\/help\/?$/);
+    await page.evaluate(() => sessionStorage.clear()); await page.reload();
+    await page.getByTestId("help-recheck").locator('a[href="/ask"]').click();
+    await expect(page.getByTestId("ask-input")).toBeVisible();
+    await expect(page.getByTestId("quick-reply-none")).toHaveCount(0);
+    await page.getByTestId("ask-input").fill(locale === "en" ? "feeling low" : "心情低落");
+    await page.getByTestId("ask-send").click();
+    await expect(page.getByTestId("assistant-record-only")).toBeVisible();
+    await expect(page.getByTestId("chat-log")).not.toContainText(locale === "en" ? "dizziness" : "頭暈");
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!));
+    expect(saved.episodes[0].disposition).toBe("urgent");
+    expect(saved.episodes.at(-1).answers.onset).toBeNull();
+    expect(saved.episodes.at(-1).sourceRecordIds).toEqual([]);
+  });
+}
+for (const locale of ["zh-HK", "en"] as const) {
+  test(`check-in mood-to-assistant handoff uses the selected locale ${locale}`, async ({ page }) => {
+    await page.addInitScript(({ demo, locale }) => { localStorage.setItem("caremate-v4", JSON.stringify(demo)); localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale, liteMode: false, introComplete: true })); }, { demo: createScenario("routine-day"), locale });
+    await page.goto("/check-in");
+    await page.getByTestId("mood-low").click();
+    await page.getByRole("link", { name: locale === "en" ? "Organise thoughts" : "整理想法", exact: true }).click();
+    await expect(page.getByTestId("chat-log")).toContainText(locale === "en" ? "Feeling low" : "心情低落");
+    await expect(page.getByTestId("assistant-record-only")).toBeVisible();
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!));
+    expect(saved.drafts[0].mood).toBe("low");
+  });
+}
+
+
+test("symptom recheck context excludes unrelated and superseded source records", () => {
+  const state = createScenario("dizziness");
+  const episode = state.episodes[0];
+  expect(hasSymptomContext(state, episode)).toBe(true);
+  expect(hasSymptomContext(state, { ...episode, sourceRecordIds: [] })).toBe(false);
+  const symptom = state.healthRecords.find(r => r.id === "rec-dizzy")!;
+  symptom.supersededByRecordId = "corrected-note";
+  state.healthRecords.push({ ...symptom, id: "corrected-note", kind: "note", text: { zh: "更正：沒有頭暈", en: "Correction: no dizziness" }, supersededByRecordId: undefined });
+  expect(hasSymptomContext(state, episode)).toBe(false);
+  expect(hasSymptomContext(state, { ...episode, sourceRecordIds: ["corrected-note"] })).toBe(false);
 });

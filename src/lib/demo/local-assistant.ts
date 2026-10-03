@@ -8,6 +8,10 @@ export function getHelpDisposition(input: string): "physical" | "emotional" | nu
   for (const kind of ["emotional", "physical"] as const) if (helpInputs[kind].some(example => normalise(example) === text)) return kind;
   return null;
 }
+/** Rechecking help is not itself evidence of a physical symptom. Use retained patient sources. */
+export function hasSymptomContext(state: DemoState, episode: HealthEpisode | null | undefined): boolean {
+  return !!episode && episode.sourceRecordIds.some(id => state.healthRecords.some(record => record.id === id && record.patientId === episode.patientId && record.category === "body" && record.kind === "symptom" && !record.supersededByRecordId));
+}
 export function getLocalAssistantReply(input: string, context: LocalAssistantContext): LocalAssistantReply {
   const reply = (intent: LocalAssistantReply["intent"], text: LocalAssistantReply["text"], nextAction: LocalAssistantReply["nextAction"], disposition: LocalAssistantReply["disposition"] = "continue", nextPath: string | null = null): LocalAssistantReply => ({ intent, text, nextAction, disposition, nextPath, question: null });
   if (context.context.actorId !== "may" || context.context.perspective !== "patient") return reply("unsupported", messages["demo.sharedPending"], null, "unsupported");

@@ -23,7 +23,7 @@ import type {
   SceneId,
 } from "./types";
 import { messages, translate, type MessageKey } from "./i18n";
-import { ensureAssistantSession, getHelpDisposition, getLocalAssistantReply, interruptForHelp } from "./demo/local-assistant";
+import { ensureAssistantSession, getHelpDisposition, getLocalAssistantReply, hasSymptomContext, interruptForHelp } from "./demo/local-assistant";
 import { symptomLine } from "./selectors";
 import { NEXT_CLOCK, OPENING_CLOCK } from "./types";
 import type { ActionResult, ActorId, CheckInDraft, DemoState, Observation, ScenarioId } from "./demo/types";
@@ -517,7 +517,7 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
   openAsk: () => set({ pendingPath: "/ask" }),
   answer: (id) => {
     const s = get();
-    if (s.demo.context.actorId !== "may" || s.activeEmergencyEpisodeId) return;
+    if (s.demo.context.actorId !== "may" || s.activeEmergencyEpisodeId || !hasSymptomContext(s.demo, currentEpisode(s.demo))) return;
     const said = (): ChatMessage[] => [...s.messages, { id: chatId(`u-${id}`), role: "user", text: labelOf(id) }];
 
     if (s.step === "urgent") {

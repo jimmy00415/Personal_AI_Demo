@@ -15,11 +15,12 @@ Patient-facing actions and their real outcomes. Removed affordances are listed a
 | Ask | 更正內容 | Drops the superseded answers, shows a correction note, and asks onset once |
 | Ask | 準備就診摘要 | `/brief` |
 | Ask | Free text | Finite local replies from current May context; unsupported inputs keep recording/question entrances. No external requests. |
-| Ask | Stray keystrokes | Answered locally with a clarifying line; no model call |
-| Ask | Model reply guards | A reply is replaced if it reads back the record packet, claims safety, or calls an UNKNOWN dose missed |
-| Ask | 重試 | Appears only after a failed model call; resends the same question without repeating it |
+| Ask | Stray keystrokes | Answered with a finite local clarification and a question entrance |
+| Ask | Finite reply boundaries | Short source-backed scripts preserve UNKNOWN medication status and avoid medical reassurance; no generated model replies |
+| Ask | Unsupported input / correction | Offers recording, saved information or a consultation question; a revised input is handled locally without a network retry |
 | Ask / Brief / Book | Symptom wording | Always derived from the answers given, so no view claims the dizziness eased when it worsened |
-| Ask | Emergency across sessions | Survives a reload in the same tab; a later visit re-asks the urgent question instead of re-showing the alarm |
+| Ask | Emergency across sessions | Same-tab reload retains help; a fresh session asks current circumstances. Physical symptom questions require retained symptom sources; emotional-only rechecks do not assume dizziness |
+| Help | Fixed physical/emotional input from assistant or check-in | Interrupts to `/help`, retains draft, static 999 information; no routine completion or contact |
 | Settings | 清除此裝置上的資料 | Two-step; returns to the 16 Sep 8:45 start, keeps language and text size, toast 已清除此裝置上的資料 |
 | Shell | GitHub Pages paths | Routes carry a trailing slash on Pages; chrome, FAB, and Ask-link rules use normalised paths |
 | Ask | 999 / 如何使用電話 | Explains the user must dial; no call is placed |
@@ -53,4 +54,3 @@ Patient-facing actions and their real outcomes. Removed affordances are listed a
 - 發送給醫生, 已致電, 診所已確認
 - Camera, microphone, and unimplemented share
 - Universal “今日暫時不需要做其他事情” footer
-| Help | Fixed physical/emotional input from assistant or check-in | Interrupts to `/help`, retains draft, static 999 information; no routine completion or contact |

@@ -93,7 +93,6 @@ export function completeCheckInTask(state: DemoState, taskId: string, checkInId:
   const at = Date.parse(task.scheduledAt ?? state.clock);
   if (Date.parse(checkIn.occurredAt) > Date.parse(state.clock) || !correctingCompleted && (Date.parse(checkIn.occurredAt) < at || clockParts(checkIn.occurredAt).dateKey !== clockParts(state.clock).dateKey)) return fail("current-checkin-required");
   if (!checkIn.followupChange) return fail("followup-change-required");
-  if (state.episodes.some(e => e.patientId === task.patientId && e.disposition === "urgent" && e.sourceRecordIds.some(id => task.sourceRecordIds.includes(id)))) return fail("urgent-help-required");
   const measurement = correctingCompleted
     ? state.observations.find(o => o.patientId === task.patientId && o.source === "home-measure" && (evidence ? o.id === evidence.measurementId : task.sourceRecordIds.includes(o.id) && clockParts(o.occurredAt).dateKey === clockParts(checkIn.occurredAt).dateKey && Date.parse(o.occurredAt) >= Date.parse(checkIn.occurredAt)))
     : state.observations.find(o => o.patientId === task.patientId && o.source === "home-measure" && Date.parse(o.occurredAt) >= Date.parse(checkIn.occurredAt) && Date.parse(o.occurredAt) <= Date.parse(state.clock) && Date.parse(o.enteredAt) >= Date.parse(checkIn.occurredAt));
@@ -127,7 +126,7 @@ export function completeCheckInTask(state: DemoState, taskId: string, checkInId:
     return t;
   });
   if (!historicalCorrection && continuing && !sameComparison && !tasks.some(t => t.id === contactId)) tasks.push({ id: contactId, patientId: task.patientId, ownerId: "may", proposedOwnerId: null, kind: "contact", status: "pending", scheduledAt: state.clock, sourceRecordIds: [recordId, checkIn.id, measurement.id], shareCategory: "body", contactOutcome: "not_contacted", contactNote: "", title: { zh: worse ? "頭暈加劇：尋求醫護協助" : "仍然頭暈：聯絡醫護跟進", en: worse ? "Worse dizziness: seek clinical help" : "Still dizzy: contact a clinician" }, revision: 1 });
-  const episodes = historicalCorrection ? state.episodes : state.episodes.map(e => e.id === episode?.id ? { ...e, answers: { ...e.answers, nextMorning: checkIn.followupChange! }, phase: "next_logged" as const, disposition: worse ? "worsening" as const : continuing ? "uncertain" as const : priorDisposition, sourceRecordIds: [...new Set([...e.sourceRecordIds, checkIn.id, measurement.id, recordId])], revision: e.revision + 1 } : e);
+  const episodes = historicalCorrection ? state.episodes : state.episodes.map(e => e.id === episode?.id && e.disposition !== "urgent" ? { ...e, answers: { ...e.answers, nextMorning: checkIn.followupChange! }, phase: "next_logged" as const, disposition: worse ? "worsening" as const : continuing ? "uncertain" as const : priorDisposition, sourceRecordIds: [...new Set([...e.sourceRecordIds, checkIn.id, measurement.id, recordId])], revision: e.revision + 1 } : e);
   const changedSourceIds = new Set([checkIn.id, ...obsoleteRecords.map(r => r.id)]);
   const briefs = state.briefs.map(b => b.sourceRecordIds.some(id => changedSourceIds.has(id)) && b.status === "confirmed" ? { ...b, status: "draft" as const, confirmedAt: null, revision: b.revision + 1 } : b);
   return success({ ...state, healthRecords, tasks, episodes, briefs });
