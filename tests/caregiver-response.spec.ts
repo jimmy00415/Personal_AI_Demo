@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createScenario } from "../src/lib/demo/scenarios";
 import type { DemoState } from "../src/lib/demo/types";
-import { createAttentionEvent, respondToEvent, resolveEvent, selectSharingProjection, setConsent, sharedExportText } from "../src/lib/demo/sharing";
+import { createAttentionEvent, respondToEvent, resolveEvent, revokeConsent, selectSharingProjection, setConsent, sharedExportText } from "../src/lib/demo/sharing";
 import { completePersonalTask, createAccompanyTask, createAfterVisitTask, rescheduleTask } from "../src/lib/demo/care";
 import { useAppStore } from "../src/lib/store";
 import { isDemoState } from "../src/lib/demo/persistence";
@@ -233,8 +233,9 @@ for (const mutation of ["respond", "resolve"] as const) for (const restriction o
     const result = mutation === "respond" ? useAppStore.getState().respondToEvent("event-fixture-attention", { actorId: "david", decision: "accept", note: "NEW_NOTE" }) : useAppStore.getState().resolveEvent("event-fixture-attention", "david");
     expect(result).toEqual({ ok: false, code: "event-unavailable" });
     const actual = useAppStore.getState().demo;
-    expect(actual.tasks).toEqual(local.tasks); expect(actual.observations).toEqual(local.observations); expect(actual.checkIns).toEqual(local.checkIns); expect(actual.context).toEqual(local.context); expect(actual.events[0].response).toBe(local.events[0].response);
-    if (restriction !== "category") expect(actual.events[0].status).toBe("revoked");
+    const expectedTasks = local.tasks.map(t => mutation === "resolve" && t.id === "task-fixture-attention" ? { ...t, ownerId: "may", proposedOwnerId: null, revision: t.revision + 1 } : t);
+    expect(actual.tasks).toEqual(expectedTasks); expect(actual.observations).toEqual(local.observations); expect(actual.checkIns).toEqual(local.checkIns); expect(actual.context).toEqual(local.context); expect(actual.events[0].response).toBe(local.events[0].response);
+    expect(actual.events[0].status).toBe("revoked");
     expect(selectSharingProjection(actual, "may", "david").events).toEqual([]);
   } finally {
     useAppStore.setState(priorStore, true); if (priorWindow) Object.defineProperty(globalThis, "window", priorWindow); else Reflect.deleteProperty(globalThis, "window");
@@ -305,4 +306,93 @@ test("revoked_or_downgraded_event_cannot_reveal_old_payload", async ({ page, con
   await expect(page.getByTestId("shared-view")).not.toContainText("UNSAVED_PRIVATE_NOTE");
   await expect(page.getByTestId("event-accept")).toHaveCount(0);
   expect((await snapshot(page)).tasks.find(t => t.id === "task-fixture-attention")?.ownerId).toBe("may");
+});
+
+function acceptedAfterVisit() {
+  const initial = afterVisit(); const task = initial.tasks.at(-1)!;
+  const created = value(createAttentionEvent(initial, { patientId: "may", sourceRecordId: task.sourceRecordIds[0], taskId: task.id, scenario: "after-visit-task" }));
+  return value(respondToEvent({ ...created, context: { actorId: "david", patientId: "may", perspective: "caregiver" } }, created.events[0].id, { actorId: "david", decision: "accept", note: "Agreed before permission changed" }));
+}
+for (const restriction of ["revoke", "category"] as const) test(`accepted agreement stays invalid after ${restriction} and regrant`, () => {
+  const accepted = acceptedAfterVisit(); const event = accepted.events[0]; const task = accepted.tasks.at(-1)!;
+  const may = { ...accepted, context: { actorId: "may" as const, patientId: "may" as const, perspective: "patient" as const } };
+  const restricted = value(restriction === "revoke" ? revokeConsent(may, "grant-david") : setConsent(may, { patientId: "may", recipientId: "david", level: "full", categories: ["measurements"] }));
+  const regranted = value(setConsent(restricted, { patientId: "may", recipientId: "david", level: "full", categories: ["body", "measurements"] }));
+  const david = { ...regranted, context: accepted.context };
+  expect(resolveEvent(david, event.id, "david")).toEqual({ ok: false, code: "event-unavailable" });
+  expect(restricted.events[0]).toEqual({ ...event, status: "revoked", revision: event.revision + 1 });
+  expect(restricted.tasks.at(-1)).toEqual({ ...task, ownerId: "may", proposedOwnerId: null, revision: task.revision + 1 });
+  expect(restricted.healthRecords).toEqual(accepted.healthRecords);
+  expect(restricted.tasks.slice(0, -1)).toEqual(accepted.tasks.slice(0, -1));
+  expect(selectSharingProjection(regranted, "may", "david").events).toEqual([]);
+  expect(respondToEvent(david, event.id, { actorId: "david", decision: "accept", note: "Again" })).toEqual({ ok: false, code: "event-unavailable" });
+  expect(createAttentionEvent(regranted, { patientId: "may", sourceRecordId: task.sourceRecordIds[0], taskId: task.id, scenario: "after-visit-task" })).toEqual({ ok: false, code: "event-unavailable" });
+  expect(regranted.events).toEqual(restricted.events);
+  // A completed assistance receipt is historical fact and must survive the same permission cycle.
+  const completed = value(resolveEvent(accepted, event.id, "david"));
+  const completedMay = { ...completed, context: may.context };
+  const completedRestricted = value(restriction === "revoke" ? revokeConsent(completedMay, "grant-david") : setConsent(completedMay, { patientId: "may", recipientId: "david", level: "full", categories: ["measurements"] }));
+  expect(completedRestricted.tasks).toEqual(completed.tasks); expect(completedRestricted.events).toEqual(completed.events); expect(completedRestricted.healthRecords).toEqual(completed.healthRecords);
+});
+
+for (const restriction of ["revoke", "category"] as const) test(`open accepted detail remains unavailable after ${restriction} and regrant`, async ({ page, context }) => {
+  const accepted = acceptedAfterVisit(); const event = accepted.events[0];
+  await start(page, accepted, `/notifications?event=${event.id}`);
+  await expect(page.getByTestId("event-resolve")).toBeVisible();
+  const may = await context.newPage(); await actor(may, "may", "/sharing");
+  if (restriction === "revoke") { await may.getByTestId("sharing-revoke").click(); await may.getByTestId("revoke-confirm").click(); }
+  else { await may.getByTestId("category-body").uncheck(); await may.getByTestId("category-measurements").check(); await may.getByTestId("sharing-review").click(); await may.getByTestId("sharing-confirm").click(); }
+  await expect(page.getByTestId("event-unavailable")).toBeVisible();
+  expect((await snapshot(may)).tasks.at(-1)?.ownerId).toBe("may");
+  await may.getByTestId("category-body").check(); await may.getByTestId("sharing-review").click(); await may.getByTestId("sharing-confirm").click();
+  await expect(page.getByTestId("event-unavailable")).toBeVisible(); await page.reload();
+  await expect(page.getByTestId("event-resolve")).toHaveCount(0);
+  await may.goto(`/notifications?event=${event.id}`);
+  await expect(may.getByTestId("event-status")).toContainText("已失效"); await expect(may.getByTestId("event-owner")).toContainText("May");
+  await expect(may.getByTestId("event-detail")).toContainText("Agreed before permission changed");
+});
+
+for (const restriction of ["revoke", "category"] as const) for (const entry of ["refresh", "write", "stale-resolve"] as const) for (const memoryOnly of [false, true]) test(`accepted ${restriction} merge at ${entry} survives regrant, memoryOnly=${memoryOnly}`, () => {
+  const priorStore = useAppStore.getState(); const priorWindow = Object.getOwnPropertyDescriptor(globalThis, "window"); const storage = new LocalStorage();
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { localStorage: storage, sessionStorage: new LocalStorage() } });
+  try {
+    const initial = acceptedAfterVisit(); initial.grants[0].revision = 2;
+    const local = structuredClone(initial); local.observations[0].note = "UNSAVED_OBSERVATION";
+    local.tasks[0].workflowRevision = 1;
+    local.checkIns.push({ id: "completed-source", draftId: "completed-draft", patientId: "may", occurredAt: local.clock, enteredAt: local.clock, mood: "okay", body: "well", note: "old clinical history", taskId: "task-bp", revision: 1 });
+    local.tasks[0].sourceRecordIds.push("completed-source");
+    local.tasks[0].completionHistory = [{ checkInId: "completed-source", checkInRevision: 1, measurementId: "bp-16", episodeId: "episode-dizzy", priorDisposition: "ordinary" }];
+    const task = local.tasks.at(-1)!; const event = local.events[0];
+    // Simulate another valid persisted tab with a same-revision restrictive grant but stale acknowledgement.
+    const remote = structuredClone(memoryOnly ? initial : local);
+    if (restriction === "revoke") remote.grants[0].status = "revoked";
+    else remote.grants[0].categories = ["measurements"];
+    expect(isDemoState(local)).toBe(true); expect(isDemoState(remote)).toBe(true);
+    storage.setItem("caremate-v4", JSON.stringify(remote));
+    useAppStore.setState({ demo: local, persistenceError: memoryOnly ? "QuotaExceededError" : null, activeEmergencyEpisodeId: null });
+    if (entry === "refresh") useAppStore.getState().syncFromStorage();
+    else if (entry === "write") useAppStore.getState().persistNow();
+    else expect(useAppStore.getState().resolveEvent(event.id, "david")).toEqual({ ok: false, code: "event-unavailable" });
+    const invalidated = useAppStore.getState().demo;
+    expect(invalidated.events[0]).toEqual({ ...event, status: "revoked", revision: event.revision + 1 });
+    expect(invalidated.tasks.at(-1)).toEqual({ ...task, ownerId: "may", proposedOwnerId: null, revision: task.revision + 1 });
+    expect(invalidated.tasks.slice(0, -1)).toEqual(local.tasks.slice(0, -1)); expect(invalidated.observations).toEqual(local.observations); expect(invalidated.checkIns).toEqual(local.checkIns); expect(invalidated.healthRecords).toEqual(local.healthRecords); expect(invalidated.context).toEqual(local.context);
+    useAppStore.getState().persistNow();
+    useAppStore.getState().syncFromStorage();
+    expect(useAppStore.getState().demo.tasks).toEqual(invalidated.tasks); expect(useAppStore.getState().demo.events).toEqual(invalidated.events);
+    // Even a stale broader same-revision write cannot restore the agreement after it is invalidated.
+    storage.setItem("caremate-v4", JSON.stringify(local)); useAppStore.getState().syncFromStorage();
+    expect(useAppStore.getState().demo.events[0].status).toBe("revoked"); expect(useAppStore.getState().demo.tasks.at(-1)?.ownerId).toBe("may");
+    useAppStore.setState({ demo: { ...useAppStore.getState().demo, context: { actorId: "may", patientId: "may", perspective: "patient" } } });
+    expect(useAppStore.getState().setConsent({ patientId: "may", recipientId: "david", level: "full", categories: ["body", "measurements"] }).ok).toBe(true);
+    const regranted = useAppStore.getState().demo;
+    expect(regranted.grants[0].revision).toBe(3); expect(regranted.events).toEqual(invalidated.events); expect(regranted.tasks.at(-1)?.ownerId).toBe("may");
+    // Reintroduce only the old acknowledgement beneath the legitimately restored permission.
+    storage.setItem("caremate-v4", JSON.stringify({ ...regranted, tasks: local.tasks, events: local.events }));
+    useAppStore.getState().syncFromStorage();
+    expect(useAppStore.getState().demo.events).toEqual(invalidated.events); expect(useAppStore.getState().demo.tasks.at(-1)?.ownerId).toBe("may");
+    useAppStore.setState({ demo: { ...regranted, context: local.context } });
+    expect(useAppStore.getState().resolveEvent(event.id, "david")).toEqual({ ok: false, code: "event-unavailable" });
+    expect(selectSharingProjection(useAppStore.getState().demo, "may", "david").events).toEqual([]);
+  } finally { useAppStore.setState(priorStore, true); if (priorWindow) Object.defineProperty(globalThis, "window", priorWindow); else Reflect.deleteProperty(globalThis, "window"); }
 });

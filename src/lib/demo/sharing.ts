@@ -7,6 +7,21 @@ export const sharingLevels: SharingLevel[] = ["alerts-only", "summary", "full"];
 export type ConsentInput = { patientId: PatientId; recipientId: RecipientId; level: SharingLevel; categories: ShareCategory[] };
 const fail = (code: string): ActionResult<never> => ({ ok: false, code });
 
+/** Consent ends unfinished agreements, while their response and clinical history remain evidence. */
+export function invalidateUnavailableRequests(state: DemoState): DemoState {
+  const revokedTasks = new Set<string>();
+  const events = state.events.map(e => {
+    const grant = state.grants.filter(g => g.patientId === e.patientId && g.recipientId === e.recipientId).sort((a, b) => b.revision - a.revision)[0];
+    const task = state.tasks.find(t => t.id === e.taskId && t.patientId === e.patientId);
+    const unavailable = !grant || grant.status !== "active" || !grant.categories.includes(e.category) || !task || task.shareCategory === "private" || !grant.categories.includes(task.shareCategory);
+    const next = ["pending", "acknowledged"].includes(e.status) && unavailable ? { ...e, status: "revoked" as const, revision: e.revision + 1 } : e;
+    if (next.status === "revoked") revokedTasks.add(e.taskId);
+    return next;
+  });
+  const tasks = state.tasks.map(t => revokedTasks.has(t.id) && t.ownerId === "david" && !["completed", "cancelled"].includes(t.status) && !t.supersededByCheckInRevision ? { ...t, ownerId: "may" as const, proposedOwnerId: null, revision: t.revision + 1 } : t);
+  return events.every((e, i) => e === state.events[i]) && tasks.every((t, i) => t === state.tasks[i]) ? state : { ...state, events, tasks };
+}
+
 /** A finite local request, never an interpretation of a measurement or symptom threshold. */
 export function createAttentionEvent(state: DemoState, input: { patientId: PatientId; sourceRecordId: string; taskId?: string; scenario: "fixture-attention" | "after-visit-task" }): ActionResult<DemoState> {
   if (state.context.actorId !== "may" || state.context.patientId !== input.patientId) return fail("patient-only");
@@ -59,25 +74,25 @@ export function resolveEvent(state: DemoState, eventId: string, actorId: ActorId
 export function setConsent(state: DemoState, input: ConsentInput): ActionResult<DemoState> {
   if (state.context.actorId !== "may" || state.context.patientId !== input.patientId) return fail("patient-only");
   if (input.patientId !== "may" || !recipients.includes(input.recipientId) || !sharingLevels.includes(input.level) || !Array.isArray(input.categories) || !input.categories.length || input.categories.some(c => !shareCategories.includes(c))) return fail("invalid-consent");
+  // Repair an already-unavailable acknowledgement before a regrant can mask its invalidity.
+  if (state.events.some(e => e.status === "acknowledged")) state = invalidateUnavailableRequests(state);
   const prior = state.grants.find(g => g.patientId === input.patientId && g.recipientId === input.recipientId);
   const categories = shareCategories.filter(c => input.categories.includes(c));
   const grant = { ...input, categories, id: prior?.id ?? `grant-${input.recipientId}`, status: "active" as const, updatedAt: state.clock, revision: (prior?.revision ?? 0) + 1 };
-  return { ok: true, value: { ...state,
+  return { ok: true, value: invalidateUnavailableRequests({ ...state,
     grants: [...state.grants.filter(g => g.id !== grant.id), grant],
     briefs: state.briefs.map(b => b.patientId === input.patientId && b.recipientId === input.recipientId ? { ...b, status: "draft", confirmedAt: null, revision: b.revision + 1 } : b),
-    events: state.events.map(e => e.patientId === input.patientId && e.recipientId === input.recipientId && !categories.includes(e.category) && e.status === "pending" ? { ...e, status: "revoked", revision: e.revision + 1 } : e),
-  } };
+  }) };
 }
 export function revokeConsent(state: DemoState, grantId: string): ActionResult<DemoState> {
   if (state.context.actorId !== "may") return fail("patient-only");
   const grant = state.grants.find(g => g.id === grantId && g.patientId === state.context.patientId);
   if (!grant) return fail("grant-missing");
-  if (grant.status === "revoked") return { ok: true, value: state };
-  return { ok: true, value: { ...state,
+  if (grant.status === "revoked") return { ok: true, value: invalidateUnavailableRequests(state) };
+  return { ok: true, value: invalidateUnavailableRequests({ ...state,
     grants: state.grants.map(g => g.id === grantId ? { ...g, status: "revoked", updatedAt: state.clock, revision: g.revision + 1 } : g),
-    events: state.events.map(e => e.patientId === grant.patientId && e.recipientId === grant.recipientId && e.status === "pending" ? { ...e, status: "revoked", revision: e.revision + 1 } : e),
     briefs: state.briefs.map(b => b.patientId === grant.patientId && b.recipientId === grant.recipientId ? { ...b, status: "draft", confirmedAt: null, revision: b.revision + 1 } : b),
-  } };
+  }) };
 }
 const line = (label: Localized, suffix: string): Localized => ({ zh: `${label.zh} · ${suffix}`, en: `${label.en} · ${suffix}` });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { setConsent, revokeConsent, createAttentionEvent, respondToEvent, resolveEvent, shareCategories, sharingLevels, type ConsentInput } from "./demo/sharing";
+import { setConsent, revokeConsent, createAttentionEvent, respondToEvent, resolveEvent, invalidateUnavailableRequests, shareCategories, sharingLevels, type ConsentInput } from "./demo/sharing";
 import type {
   Answers,
   Appointment,
@@ -317,7 +317,7 @@ function savedWorld(base: AppState): AppState {
 /** Higher revisions win; equal revisions meet at the most restrictive shared permission.
  * Revoked beats active, categories intersect, and the lower content level wins. The
  * revision stays stable so a later explicit May edit can supersede the conflict.
- * Only permission facts change: unsaved clinical data and workflow history stay intact.
+ * Unfinished unavailable assignments return to May; sources and workflow history stay intact.
  */
 function mergePermissions(base: DemoState, incoming: DemoState, equalOnly = false): DemoState {
   const changed = new Set<string>();
@@ -342,16 +342,16 @@ function mergePermissions(base: DemoState, incoming: DemoState, equalOnly = fals
   // An event revocation must merge even when the grant itself is identical.
   const events = base.events.map(e => {
     const candidate = incoming.events.find(n => n.id === e.id);
-    if (candidate?.status === "revoked" && candidate.revision >= e.revision && (e.status !== "revoked" || candidate.revision > e.revision) && (!equalOnly || candidate.revision === e.revision)) return { ...e, status: "revoked" as const, revision: candidate.revision };
-    const grant = grants.find(g => g.patientId === e.patientId && g.recipientId === e.recipientId && changed.has(g.id));
-    return e.status === "pending" && grant && (grant.status === "revoked" || !grant.categories.includes(e.category)) ? { ...e, status: "revoked" as const, revision: e.revision + 1 } : e;
+    if (candidate?.status === "revoked" && candidate.revision >= e.revision && (e.status !== "revoked" || candidate.revision > e.revision)) return { ...e, status: "revoked" as const, revision: candidate.revision };
+    return e;
   });
   const briefs = base.briefs.map(b => {
     const grant = grants.find(g => g.patientId === b.patientId && g.recipientId === b.recipientId && changed.has(g.id));
     // A same-revision conflict changes the visible content too, invalidating confirmation.
     return grant && b.status === "confirmed" ? { ...b, status: "draft" as const, confirmedAt: null, revision: b.revision + 1 } : b;
   });
-  return !changed.size && events.every((e, i) => e === base.events[i]) ? base : { ...base, grants, events, briefs };
+  const merged = !changed.size && events.every((e, i) => e === base.events[i]) ? base : { ...base, grants, events, briefs };
+  return invalidateUnavailableRequests(merged);
 }
 
 let toastTimer: number | undefined;
