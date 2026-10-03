@@ -163,7 +163,7 @@ export interface MemoryItem extends PatientEntity {
 /** Sharing DTOs deliberately cannot carry arbitrary notes, response payloads or completion history. */
 export type SharedCheckIn = Pick<DailyCheckIn, "id" | "patientId" | "occurredAt" | "enteredAt" | "revision"> & { body?: BodyFeeling; mood?: Mood };
 export type SharedTask = Pick<CareTask, "id" | "patientId" | "ownerId" | "proposedOwnerId" | "kind" | "status" | "scheduledAt" | "shareCategory" | "title" | "revision" | "sourceRecordIds">;
-export type SharedEvent = Pick<AttentionEvent, "id" | "patientId" | "recipientId" | "taskId" | "status" | "occurredAt" | "revision" | "sourceRecordIds"> & { text: Localized };
+export type SharedEvent = Pick<AttentionEvent, "id" | "patientId" | "recipientId" | "taskId" | "status" | "occurredAt" | "revision" | "sourceRecordIds"> & { text: Localized; ownerId: ActorId; taskStatus: TaskStatus; canRespond: boolean; canResolve: boolean };
 export type SharedReport = Pick<ImportedReport, "id" | "patientId" | "occurredAt" | "enteredAt" | "source" | "category" | "revision" | "title" | "originalText"> & { results: Pick<LabResult, "id" | "name" | "value" | "unit">[] };
 export interface SharingProjection {
   patientId: PatientId;

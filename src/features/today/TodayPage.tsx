@@ -42,6 +42,7 @@ export function TodayPage() {
     <div data-testid="today-page" className="mx-auto max-w-[720px]">
       <p className="text-[15px] text-ink-muted">{formatDate(clock, locale)}</p>
       <h1 className="mt-1 text-[30px] leading-tight">{t("today.greeting")}</h1>
+      <Link href="/notifications" data-testid="today-events" className="mt-4 inline-flex min-h-11 items-center text-brand">{t("events.title")}</Link>
 
       <section data-testid="daily-brief" className="mt-8">
         <h2 className="text-[24px] leading-snug">{t(hero.titleKey)}</h2>

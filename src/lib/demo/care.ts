@@ -50,7 +50,7 @@ export function createAccompanyTask(state: DemoState, appointmentId: string): Ac
   const id = `task-accompany-${appointment.id}`;
   const prior = state.tasks.find(t => t.id === id);
   if (prior && prior.ownerId !== "david") return fail("owner-mismatch");
-  if (prior?.status === "scheduled" && prior.scheduledAt === appointment.scheduledAt) return success(state);
+  if (prior && ["scheduled", "completed"].includes(prior.status) && prior.scheduledAt === appointment.scheduledAt) return success(state);
   const task: CareTask = { ...prior, id, patientId: appointment.patientId, ownerId: "david", proposedOwnerId: null, kind: "accompany", status: "scheduled", scheduledAt: appointment.scheduledAt, sourceRecordIds: [appointment.id], shareCategory: "appointments", contactOutcome: null, contactNote: "", title: { zh: "我的陪同覆診事項", en: "My reminder to accompany May" }, revision: (prior?.revision ?? 0) + 1 };
   return success({ ...state, tasks: prior ? state.tasks.map(t => t.id === id ? task : t) : [...state.tasks, task] });
 }
@@ -100,7 +100,22 @@ export function cancelTask(state: DemoState, taskId: string): ActionResult<DemoS
   if (task.status === "completed") return fail("task-completed");
   if (task.status === "cancelled") return success(state);
   const next = replaceTask(state, { ...task, status: "cancelled", ...(task.kind === "check-in" ? { workflowRevision: task.revision + 1 } : {}), revision: task.revision + 1 });
-  return success(taskId === "task-morning" ? { ...next, episodes: next.episodes.map(e => e.patientId === task.patientId && e.followup === "scheduled" ? { ...e, followup: "cancelled", revision: e.revision + 1 } : e) } : next);
+  const cancelled = { ...next, events: next.events.map(e => e.taskId === taskId && ["pending", "acknowledged"].includes(e.status) ? { ...e, status: "revoked" as const, revision: e.revision + 1 } : e) };
+  return success(taskId === "task-morning" ? { ...cancelled, episodes: cancelled.episodes.map(e => e.patientId === task.patientId && e.followup === "scheduled" ? { ...e, followup: "cancelled", revision: e.revision + 1 } : e) } : cancelled);
+}
+
+/** A factual task action, deliberately bounded away from clinical completion workflows. */
+export function completePersonalTask(state: DemoState, taskId: string): ActionResult<DemoState> {
+  const task = state.tasks.find(t => t.id === taskId && t.patientId === state.context.patientId);
+  if (!task || !["after-visit", "accompany"].includes(task.kind)) return fail("factual-task-required");
+  const mayComplete = task.kind === "after-visit" && state.context.actorId === "may";
+  const davidComplete = task.kind === "accompany" && task.ownerId === "david" && state.context.actorId === "david" && selectSharingProjection(state, task.patientId, "david").tasks.some(t => t.id === taskId);
+  if (!mayComplete && !davidComplete) return fail("task-unavailable");
+  if (task.status === "cancelled" || task.supersededByCheckInRevision) return fail("task-inactive");
+  if (task.status === "completed") return success(state);
+  return success({ ...replaceTask(state, { ...task, status: "completed", revision: task.revision + 1 }),
+    events: state.events.map(e => e.taskId === taskId && ["pending", "acknowledged"].includes(e.status) ? { ...e, status: "resolved", revision: e.revision + 1 } : e),
+  });
 }
 function updateTaskTime(state: DemoState, taskId: string, until: string, status: "scheduled" | "snoozed"): ActionResult<DemoState> {
   const task = state.tasks.find(t => t.id === taskId);
@@ -109,7 +124,10 @@ function updateTaskTime(state: DemoState, taskId: string, until: string, status:
   const time = future(state, until); if (!time.ok) return time;
   if (["completed", "cancelled"].includes(task.status)) return fail("task-inactive");
   if (task.status === status && task.scheduledAt === until) return success(state);
-  return success(replaceTask(state, { ...task, status, scheduledAt: until, ...(task.kind === "check-in" ? { workflowRevision: task.revision + 1 } : {}), revision: task.revision + 1 }));
+  const changesRequest = task.kind === "after-visit" && state.events.some(e => e.taskId === taskId && ["pending", "acknowledged"].includes(e.status));
+  const updated = replaceTask(state, { ...task, status, scheduledAt: until, ...(changesRequest ? { ownerId: "may" as const, proposedOwnerId: null } : {}), ...(task.kind === "check-in" ? { workflowRevision: task.revision + 1 } : {}), revision: task.revision + 1 });
+  // A new time does not manufacture David's agreement to the changed task.
+  return success(changesRequest ? { ...updated, events: updated.events.map(e => e.taskId === taskId && ["pending", "acknowledged"].includes(e.status) ? { ...e, status: "revoked", revision: e.revision + 1 } : e) } : updated);
 }
 export function snoozeTask(state: DemoState, taskId: string, until: string): ActionResult<DemoState> { return updateTaskTime(state, taskId, until, "snoozed"); }
 export function rescheduleTask(state: DemoState, taskId: string, at: string): ActionResult<DemoState> { return updateTaskTime(state, taskId, at, "scheduled"); }

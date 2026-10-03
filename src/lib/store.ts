@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { setConsent, revokeConsent, shareCategories, sharingLevels, type ConsentInput } from "./demo/sharing";
+import { setConsent, revokeConsent, createAttentionEvent, respondToEvent, resolveEvent, shareCategories, sharingLevels, type ConsentInput } from "./demo/sharing";
 import type {
   Answers,
   Appointment,
@@ -28,7 +28,7 @@ import { ensureAssistantSession, getHelpDisposition, getLocalAssistantReply, has
 import { symptomLine } from "./selectors";
 import { NEXT_CLOCK, OPENING_CLOCK } from "./types";
 import type { ActionResult, ActorId, CheckInDraft, DemoState, Observation, ScenarioId } from "./demo/types";
-import { setAppointment, cancelAppointment, createAccompanyTask, cancelTask, completeCheckInTask, createAfterVisitTask, followupDraftId, recordContactOutcome, rescheduleTask, scheduleFollowup, setDoseStatus, snoozeTask, type ContactOutcome, type DoseCorrection, type FollowupChange } from "./demo/care";
+import { setAppointment, cancelAppointment, createAccompanyTask, completePersonalTask, cancelTask, completeCheckInTask, createAfterVisitTask, followupDraftId, recordContactOutcome, rescheduleTask, scheduleFollowup, setDoseStatus, snoozeTask, type ContactOutcome, type DoseCorrection, type FollowupChange } from "./demo/care";
 import { createCheckInDraft, updateCheckInDraft, commitCheckIn, saveObservation } from "./demo/check-in";
 import { createScenario } from "./demo/scenarios";
 import { loadDemo, saveDemo, loadPreferences, savePreferences, getEmergencySession, setEmergencySession } from "./demo/persistence";
@@ -82,6 +82,10 @@ export interface AppState {
 }
 
 interface Actions {
+  createAttentionEvent: (input: Parameters<typeof createAttentionEvent>[1]) => ActionResult<void>;
+  respondToEvent: (eventId: string, response: Parameters<typeof respondToEvent>[2]) => ActionResult<void>;
+  resolveEvent: (eventId: string, actorId: ActorId) => ActionResult<void>;
+  completePersonalTask: (id: string) => ActionResult<void>;
   setConsent: (input: ConsentInput) => ActionResult<void>;
   revokeConsent: (grantId: string) => ActionResult<void>;
   syncFromStorage: () => void;
@@ -402,16 +406,28 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
   },
   setConsent: input => { get().syncFromStorage(); return applyCare(setConsent(get().demo, input)); },
   revokeConsent: id => { get().syncFromStorage(); return applyCare(revokeConsent(get().demo, id)); },
+  createAttentionEvent: input => { get().syncFromStorage(); return applyCare(createAttentionEvent(get().demo, input)); },
+  respondToEvent: (id, response) => { get().syncFromStorage(); return applyCare(respondToEvent(get().demo, id, response)); },
+  resolveEvent: (id, actorId) => { get().syncFromStorage(); return applyCare(resolveEvent(get().demo, id, actorId)); },
+  completePersonalTask: id => { get().syncFromStorage(); return applyCare(completePersonalTask(get().demo, id)); },
   setAppointment: (id, slotId) => applyCare(setAppointment(get().demo, id, slotId)),
   cancelAppointment: id => applyCare(cancelAppointment(get().demo, id)),
   createAccompanyTask: id => { get().syncFromStorage(); return applyCare(createAccompanyTask(get().demo, id)); },
   setDoseStatus: (id, status) => applyCare(setDoseStatus(get().demo, id, status)),
   scheduleFollowup: at => applyCare(scheduleFollowup(get().demo, get().demo.context.patientId, at)),
-  cancelCareTask: id => applyCare(cancelTask(get().demo, id)),
-  snoozeTask: (id, at) => applyCare(snoozeTask(get().demo, id, at)),
-  rescheduleTask: (id, at) => applyCare(rescheduleTask(get().demo, id, at)),
+  cancelCareTask: id => { get().syncFromStorage(); return applyCare(cancelTask(get().demo, id)); },
+  snoozeTask: (id, at) => { get().syncFromStorage(); return applyCare(snoozeTask(get().demo, id, at)); },
+  rescheduleTask: (id, at) => { get().syncFromStorage(); return applyCare(rescheduleTask(get().demo, id, at)); },
   recordContactOutcome: (id, outcome, note) => applyCare(recordContactOutcome(get().demo, id, outcome, note)),
-  createAfterVisitTask: input => applyCare(createAfterVisitTask(get().demo, input)),
+  createAfterVisitTask: input => {
+    get().syncFromStorage();
+    const created = createAfterVisitTask(get().demo, input);
+    if (!created.ok) return created;
+    const task = created.value.tasks.at(-1)!;
+    const request = input.proposedOwnerId === "david" ? createAttentionEvent(created.value, { patientId: input.patientId, sourceRecordId: task.sourceRecordIds[0], taskId: task.id, scenario: "after-visit-task" }) : null;
+    // Saving the patient's source succeeds even when consent does not permit a request.
+    return applyCare(request?.ok ? request : created);
+  },
   completeCheckInTask: (taskId, checkInId) => applyCare(completeCheckInTask(get().demo, taskId, checkInId)),
   beginTaskCheckIn: (taskId, change) => {
     const demo = get().demo;

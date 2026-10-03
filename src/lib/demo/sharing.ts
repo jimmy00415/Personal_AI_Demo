@@ -1,11 +1,60 @@
 import { messages } from "../i18n";
-import type { ActionResult, DemoState, PatientId, RecipientId, ShareCategory, SharingLevel, SharingProjection, HealthRecord, Localized } from "./types";
+import type { ActionResult, ActorId, DemoState, PatientId, RecipientId, ShareCategory, SharingLevel, SharingProjection, HealthRecord, Localized } from "./types";
 
 export const shareCategories: ShareCategory[] = ["body", "mood", "measurements", "medication", "appointments"];
 export const recipients: RecipientId[] = ["david", "caregiver-lee", "doctor-wong"];
 export const sharingLevels: SharingLevel[] = ["alerts-only", "summary", "full"];
 export type ConsentInput = { patientId: PatientId; recipientId: RecipientId; level: SharingLevel; categories: ShareCategory[] };
 const fail = (code: string): ActionResult<never> => ({ ok: false, code });
+
+/** A finite local request, never an interpretation of a measurement or symptom threshold. */
+export function createAttentionEvent(state: DemoState, input: { patientId: PatientId; sourceRecordId: string; taskId?: string; scenario: "fixture-attention" | "after-visit-task" }): ActionResult<DemoState> {
+  if (state.context.actorId !== "may" || state.context.patientId !== input.patientId) return fail("patient-only");
+  if (!["fixture-attention", "after-visit-task"].includes(input.scenario)) return fail("invalid-trigger");
+  const source = state.healthRecords.find(r => r.id === input.sourceRecordId && r.patientId === input.patientId && !r.supersededByRecordId);
+  const taskId = input.scenario === "fixture-attention" ? input.taskId ?? "task-fixture-attention" : input.taskId;
+  const task = state.tasks.find(t => t.id === taskId && t.patientId === input.patientId);
+  if (!source || !task || !task.sourceRecordIds.includes(source.id) || task.supersededByCheckInRevision || ["completed", "cancelled"].includes(task.status)) return fail("request-inactive");
+  if (input.scenario === "fixture-attention" ? source.id !== "rec-dizzy" || task.id !== "task-fixture-attention" : task.kind !== "after-visit" || source.source !== "user") return fail("invalid-trigger");
+  if (source.category === "private" || task.shareCategory === "private" || source.category !== task.shareCategory) return fail("sharing-unavailable");
+  const grant = state.grants.find(g => g.patientId === input.patientId && g.recipientId === "david");
+  if (!grant || grant.status !== "active" || !grant.categories.includes(source.category)) return fail("sharing-unavailable");
+  // The task + recipient identity survives repeated entry and later permission changes.
+  const prior = state.events.find(e => e.taskId === task.id && e.recipientId === "david");
+  if (prior) return prior.status === "revoked" ? fail("event-unavailable") : { ok: true, value: state };
+  if (task.ownerId !== "may" || task.proposedOwnerId !== "david") return fail("proposal-required");
+  const event = { id: input.scenario === "fixture-attention" ? "event-fixture-attention" : `event-${task.id}-david`, patientId: input.patientId, recipientId: "david" as const, triggerId: input.scenario, taskId: task.id, category: source.category, status: "pending" as const, occurredAt: state.clock, response: "", sourceRecordIds: [source.id], revision: 1 };
+  return { ok: true, value: { ...state, events: [...state.events, event] } };
+}
+
+export function respondToEvent(state: DemoState, eventId: string, response: { actorId: ActorId; decision: "accept" | "decline"; note: string }): ActionResult<DemoState> {
+  if (response.actorId !== "david" || state.context.actorId !== response.actorId) return fail("caregiver-only");
+  const projected = selectSharingProjection(state, state.context.patientId, "david").events.find(e => e.id === eventId);
+  if (!projected) return fail("event-unavailable");
+  if (!["accept", "decline"].includes(response.decision) || typeof response.note !== "string" || response.note.trim().length > 500) return fail("invalid-response");
+  const event = state.events.find(e => e.id === projected.id)!;
+  const status = response.decision === "accept" ? "acknowledged" : "declined";
+  const note = response.note.trim();
+  if (event.status === status && event.response === note) return { ok: true, value: state };
+  if (!projected.canRespond) return fail("event-inactive");
+  return { ok: true, value: { ...state,
+    events: state.events.map(e => e.id === event.id ? { ...e, status, response: note, revision: e.revision + 1 } : e),
+    tasks: state.tasks.map(t => t.id === event.taskId ? { ...t, ownerId: response.decision === "accept" ? "david" : "may", proposedOwnerId: null, ...(response.decision === "decline" ? { status: "pending" as const } : {}), revision: t.revision + 1 } : t),
+  } };
+}
+
+/** Completes local assistance. Clinical contact/check-in/medicine evidence has its own workflow. */
+export function resolveEvent(state: DemoState, eventId: string, actorId: ActorId): ActionResult<DemoState> {
+  if (actorId !== "david" || state.context.actorId !== actorId) return fail("caregiver-only");
+  const projected = selectSharingProjection(state, state.context.patientId, "david").events.find(e => e.id === eventId);
+  if (!projected) return fail("event-unavailable");
+  if (projected.status === "resolved") return { ok: true, value: state };
+  if (!projected.canResolve) return fail("acceptance-required");
+  return { ok: true, value: { ...state,
+    events: state.events.map(e => e.id === eventId ? { ...e, status: "resolved", revision: e.revision + 1 } : e),
+    tasks: state.tasks.map(t => t.id !== projected.taskId ? t : t.kind === "after-visit" ? { ...t, status: "completed", revision: t.revision + 1 } : { ...t, ownerId: "may", proposedOwnerId: null, revision: t.revision + 1 }),
+  } };
+}
 
 export function setConsent(state: DemoState, input: ConsentInput): ActionResult<DemoState> {
   if (state.context.actorId !== "may" || state.context.patientId !== input.patientId) return fail("patient-only");
@@ -42,9 +91,15 @@ export function selectSharingProjection(state: DemoState, patientId: PatientId, 
   const mine = <T extends { patientId: PatientId }>(items: T[]) => items.filter(i => i.patientId === patientId);
   const full = grant.level === "full";
   const detail = grant.level !== "alerts-only";
-  const tasks = mine(state.tasks).filter(t => allowed(t.shareCategory));
+  const tasks = mine(state.tasks).filter(t => allowed(t.shareCategory) && !t.supersededByCheckInRevision);
   // Alerts intentionally have no categories, source IDs, raw response or trigger text.
-  out.events = mine(state.events).filter(e => e.recipientId === recipientId && e.status !== "revoked" && allowed(e.category) && tasks.some(t => t.id === e.taskId)).map(e => ({ id: e.id, patientId, recipientId, taskId: e.taskId, status: e.status, occurredAt: e.occurredAt, revision: e.revision, sourceRecordIds: [], text: messages["sharing.neutral"] }));
+  out.events = mine(state.events).filter(e => e.recipientId === recipientId && e.status !== "revoked" && allowed(e.category) && tasks.some(t => t.id === e.taskId && t.status !== "cancelled")).map(e => {
+    const task = tasks.find(t => t.id === e.taskId)!;
+    const active = !["completed", "cancelled"].includes(task.status);
+    return { id: e.id, patientId, recipientId, taskId: e.taskId, status: e.status, occurredAt: e.occurredAt, revision: e.revision, sourceRecordIds: [], text: messages["sharing.neutral"], ownerId: task.ownerId, taskStatus: task.status,
+      canRespond: recipientId === "david" && e.status === "pending" && active && task.ownerId === "may" && task.proposedOwnerId === "david",
+      canResolve: recipientId === "david" && e.status === "acknowledged" && active && task.ownerId === "david" };
+  });
   if (!detail) return out;
   const checkIns = mine(state.checkIns);
   const bodyCheckIn = checkIns.at(-1);

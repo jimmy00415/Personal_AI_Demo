@@ -23,6 +23,11 @@ export function selectContext(state: DemoState, actorId: ActorId): DemoContext {
   return { actorId, patientId: state.context.patientId, perspective: actorId === "may" ? "patient" : "caregiver" };
 }
 
+/** Patient receipts may contain response notes; caregiver consumers must use the projection. */
+export function selectPatientEvents(state: DemoState) {
+  return state.context.actorId === "may" ? state.events.filter(e => e.patientId === state.context.patientId) : [];
+}
+
 /** Conservative transitional view: caregiver gets no clinical text until the shared projector is installed. */
 export function selectToday(state: DemoState): TodayView {
   const patientId = state.context.patientId;
