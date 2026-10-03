@@ -428,3 +428,70 @@ test("current_correction_without_completion_history_retains_legacy_evidence", ()
   expect(corrected.episodes[0]).toMatchObject({ answers: { nextMorning: "no-dizzy" }, disposition: evidence.priorDisposition });
   expect(isDemoState(corrected)).toBe(true);
 });
+
+for (const legacy of [false, true]) test(`paused_current_workflow_survives_unrelated_historical_correction: legacy=${legacy}`, () => {
+  useAppStore.getState().applyScenario("next-morning");
+  const oldDraft = useAppStore.getState().beginTaskCheckIn("task-morning", "worse"); if (!oldDraft.ok) throw Error(oldDraft.code);
+  useAppStore.getState().patchCheckIn(oldDraft.value, { mood: "okay", body: "dizzy", step: "review" });
+  let at = useAppStore.getState().demo.clock;
+  useAppStore.getState().saveObservation({ id: "paused-old-bp", patientId: "may", occurredAt: at, enteredAt: at, source: "home-measure", systolic: 145, diastolic: 89, revision: 1 });
+  useAppStore.getState().saveCheckIn(oldDraft.value);
+  const old = useAppStore.getState().demo.checkIns[0];
+  useAppStore.getState().scheduleFollowup("2026-09-18T09:15:00+08:00");
+  const scheduled = JSON.parse(JSON.stringify(useAppStore.getState().demo));
+  scheduled.clock = "2026-09-18T09:15:00+08:00";
+  if (legacy) delete scheduled.tasks.find((t: { id: string }) => t.id === "task-morning").workflowRevision;
+  useAppStore.setState({ demo: scheduled });
+  const currentDraft = useAppStore.getState().beginTaskCheckIn("task-morning", "no-dizzy"); if (!currentDraft.ok) throw Error(currentDraft.code);
+  useAppStore.getState().patchCheckIn(currentDraft.value, { mood: "low", body: "well", note: "今日本人已輸入的補充", step: "review" });
+  at = useAppStore.getState().demo.clock;
+  useAppStore.getState().saveObservation({ id: "paused-current-bp", patientId: "may", occurredAt: at, enteredAt: at, source: "home-measure", systolic: 140, diastolic: 85, revision: 1 });
+  const before = useAppStore.getState().demo;
+  const task = before.tasks.find(t => t.id === "task-morning")!;
+  const savedDraft = before.drafts.find(d => d.id === currentDraft.value)!;
+  useAppStore.getState().editCheckIn(old.id);
+  useAppStore.getState().patchCheckIn(old.draftId, { followupChange: "still", step: "review" });
+  useAppStore.getState().saveCheckIn(old.draftId);
+  const corrected = useAppStore.getState().demo;
+  expect(corrected.tasks.find(t => t.id === task.id)!.revision).toBe(task.revision + 1);
+  expect(corrected.tasks.find(t => t.id === task.id)!.workflowRevision).toBe(task.workflowRevision ?? task.revision);
+  expect(corrected.drafts.find(d => d.id === currentDraft.value)).toEqual(savedDraft);
+  expect(corrected.episodes).toEqual(before.episodes);
+  const resumed = useAppStore.getState().beginTaskCheckIn(task.id);
+  expect(useAppStore.getState().saveCheckIn(currentDraft.value).ok).toBe(true);
+  const completed = useAppStore.getState().demo;
+  expect(completed.tasks.find(t => t.id === task.id)).toMatchObject({ status: "completed", completionEvidence: { checkInId: `checkin-${currentDraft.value}`, measurementId: "paused-current-bp" } });
+  expect(resumed).toEqual(currentDraft);
+  expect(completed.checkIns.find(c => c.draftId === currentDraft.value)).toMatchObject({ mood: savedDraft.mood, body: savedDraft.body, note: savedDraft.note, occurredAt: savedDraft.occurredAt });
+  expect(completed.episodes[0].answers.nextMorning).toBe("no-dizzy");
+  expect(isDemoState(JSON.parse(JSON.stringify(completed)))).toBe(true);
+  for (const invalidRevision of ["not-a-revision", 0, completed.tasks.find(t => t.id === task.id)!.revision + 1]) {
+    const invalid = JSON.parse(JSON.stringify(completed));
+    invalid.tasks.find((t: { id: string }) => t.id === task.id).workflowRevision = invalidRevision;
+    expect(isDemoState(invalid)).toBe(false);
+  }
+});
+
+for (const transition of ["reschedule", "cancel-reopen"] as const) test(`real_workflow_change_invalidates_prior_draft: ${transition}`, () => {
+  useAppStore.getState().applyScenario("next-morning");
+  const draft = useAppStore.getState().beginTaskCheckIn("task-morning", "still"); if (!draft.ok) throw Error(draft.code);
+  useAppStore.getState().patchCheckIn(draft.value, { mood: "okay", body: "dizzy", step: "review" });
+  if (transition === "reschedule") useAppStore.getState().rescheduleTask("task-morning", "2026-09-17T10:00:00+08:00");
+  else {
+    useAppStore.getState().cancelCareTask("task-morning");
+    useAppStore.getState().scheduleFollowup("2026-09-17T10:00:00+08:00");
+  }
+  useAppStore.setState({ demo: { ...useAppStore.getState().demo, clock: "2026-09-17T10:00:00+08:00" } });
+  const at = useAppStore.getState().demo.clock;
+  useAppStore.getState().saveObservation({ id: `changed-bp-${transition}`, patientId: "may", occurredAt: at, enteredAt: at, source: "home-measure", systolic: 145, diastolic: 89, revision: 1 });
+  useAppStore.getState().saveCheckIn(draft.value);
+  const state = useAppStore.getState().demo;
+  expect(state.tasks.find(t => t.id === "task-morning")!.status).toBe("scheduled");
+  expect(completeCheckInTask(state, "task-morning", `checkin-${draft.value}`)).toEqual({ ok: false, code: "confirmed-checkin-required" });
+  const replacement = useAppStore.getState().beginTaskCheckIn("task-morning", "still"); if (!replacement.ok) throw Error(replacement.code);
+  expect(replacement.value).not.toBe(draft.value);
+  useAppStore.getState().patchCheckIn(replacement.value, { mood: "okay", body: "dizzy", step: "review" });
+  useAppStore.getState().saveCheckIn(replacement.value);
+  expect(useAppStore.getState().demo.tasks.find(t => t.id === "task-morning")!.status).toBe("completed");
+  expect(isDemoState(useAppStore.getState().demo)).toBe(true);
+});

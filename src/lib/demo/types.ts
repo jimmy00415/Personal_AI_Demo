@@ -121,6 +121,8 @@ export interface CareTask extends PatientEntity {
   contactNote: string;
   title: Localized;
   revision: number;
+  /** Entity revision at the latest scheduling transition; stable during source/history reconciliation. */
+  workflowRevision?: number;
   completionEvidence?: CheckInCompletionEvidence;
   completionHistory?: CheckInCompletionEvidence[];
   supersededByCheckInRevision?: number;

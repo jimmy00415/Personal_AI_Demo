@@ -21,7 +21,7 @@ function future(s: DemoState, at: string): ActionResult<void> {
   return Date.parse(at) > Date.parse(s.clock) ? { ok: true, value: undefined } : fail("past-time");
 }
 function replaceTask(s: DemoState, task: CareTask) { return { ...s, tasks: s.tasks.map(t => t.id === task.id ? task : t) }; }
-export function followupDraftId(task: CareTask, at?: string) { return `draft-followup-${task.id}-${task.revision}${at ? `-${clockParts(at).dateKey}` : ""}`; }
+export function followupDraftId(task: CareTask, at?: string) { return `draft-followup-${task.id}-${task.workflowRevision ?? task.revision}${at ? `-${clockParts(at).dateKey}` : ""}`; }
 
 export function setDoseStatus(state: DemoState, doseId: string, status: DoseCorrection): ActionResult<DemoState> {
   const dose = state.medicationDoses.find(d => d.id === doseId);
@@ -42,6 +42,7 @@ export function scheduleFollowup(state: DemoState, patientId: PatientId, at: str
   if (prior?.scheduledAt === at && prior.status === "scheduled") return success(state);
   const episode = state.episodes.filter(e => e.patientId === patientId).at(-1);
   const task: CareTask = { id: "task-morning", patientId, ownerId: prior?.ownerId ?? patientId, proposedOwnerId: prior?.proposedOwnerId ?? null, kind: "check-in", status: "scheduled", scheduledAt: at, sourceRecordIds: prior?.sourceRecordIds ?? episode?.sourceRecordIds ?? [], shareCategory: "body", contactOutcome: null, contactNote: "", title: { zh: "記錄血壓和頭暈情況", en: "Record blood pressure and dizziness" }, revision: (prior?.revision ?? 0) + 1, ...(prior?.completionEvidence ? { completionEvidence: prior.completionEvidence } : {}), ...(prior?.completionHistory || prior?.completionEvidence ? { completionHistory: prior.completionHistory ?? [prior!.completionEvidence!] } : {}) };
+  task.workflowRevision = task.revision;
   return success({ ...state, tasks: prior ? state.tasks.map(t => t.id === task.id ? task : t) : [...state.tasks, task], episodes: state.episodes.map(e => e.id === episode?.id ? { ...e, followup: "scheduled", phase: "followup_scheduled", revision: e.revision + 1 } : e) });
 }
 export function cancelTask(state: DemoState, taskId: string): ActionResult<DemoState> {
@@ -50,7 +51,7 @@ export function cancelTask(state: DemoState, taskId: string): ActionResult<DemoS
   if (!mayEdit(state, task.patientId)) return fail("patient-only");
   if (task.status === "completed") return fail("task-completed");
   if (task.status === "cancelled") return success(state);
-  const next = replaceTask(state, { ...task, status: "cancelled", revision: task.revision + 1 });
+  const next = replaceTask(state, { ...task, status: "cancelled", ...(task.kind === "check-in" ? { workflowRevision: task.revision + 1 } : {}), revision: task.revision + 1 });
   return success(taskId === "task-morning" ? { ...next, episodes: next.episodes.map(e => e.patientId === task.patientId && e.followup === "scheduled" ? { ...e, followup: "cancelled", revision: e.revision + 1 } : e) } : next);
 }
 function updateTaskTime(state: DemoState, taskId: string, until: string, status: "scheduled" | "snoozed"): ActionResult<DemoState> {
@@ -60,7 +61,7 @@ function updateTaskTime(state: DemoState, taskId: string, until: string, status:
   const time = future(state, until); if (!time.ok) return time;
   if (["completed", "cancelled"].includes(task.status)) return fail("task-inactive");
   if (task.status === status && task.scheduledAt === until) return success(state);
-  return success(replaceTask(state, { ...task, status, scheduledAt: until, revision: task.revision + 1 }));
+  return success(replaceTask(state, { ...task, status, scheduledAt: until, ...(task.kind === "check-in" ? { workflowRevision: task.revision + 1 } : {}), revision: task.revision + 1 }));
 }
 export function snoozeTask(state: DemoState, taskId: string, until: string): ActionResult<DemoState> { return updateTaskTime(state, taskId, until, "snoozed"); }
 export function rescheduleTask(state: DemoState, taskId: string, at: string): ActionResult<DemoState> { return updateTaskTime(state, taskId, at, "scheduled"); }
@@ -115,7 +116,7 @@ export function completeCheckInTask(state: DemoState, taskId: string, checkInId:
   const completionEvidence = { checkInId: checkIn.id, checkInRevision: checkIn.revision, measurementId: measurement.id, episodeId: episode?.id ?? null, priorDisposition };
   const completionHistory = [...(task.completionHistory ?? (task.completionEvidence ? [task.completionEvidence] : [])).filter(e => e.checkInId !== checkIn.id), completionEvidence];
   const tasks = state.tasks.map(t => {
-    if (t.id === task.id) return { ...t, status: historicalCorrection ? t.status : "completed" as const, sourceRecordIds: [...new Set([...t.sourceRecordIds, checkIn.id, measurement.id, recordId])], ...(historicalCorrection ? {} : { completionEvidence }), completionHistory, revision: t.revision + 1 };
+    if (t.id === task.id) return { ...t, status: historicalCorrection ? t.status : "completed" as const, sourceRecordIds: [...new Set([...t.sourceRecordIds, checkIn.id, measurement.id, recordId])], ...(historicalCorrection ? {} : { completionEvidence }), completionHistory, workflowRevision: t.workflowRevision ?? t.revision, revision: t.revision + 1 };
     if ((t.id === contactBase || t.id.startsWith(`${contactBase}-r`)) && t.id !== contactId && !t.supersededByCheckInRevision) {
       if (sameComparison) return { ...t, sourceRecordIds: [...new Set([...t.sourceRecordIds, recordId])], revision: t.revision + 1 };
       const responded = t.contactOutcome !== "not_contacted" || !!t.contactNote || t.ownerId !== "may" || t.proposedOwnerId !== null || state.events.some(e => e.taskId === t.id && e.status !== "pending");
