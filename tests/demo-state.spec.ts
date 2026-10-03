@@ -3,6 +3,7 @@ import { createScenario, scenarioIds } from "../src/lib/demo/scenarios";
 import { selectContext, selectToday } from "../src/lib/demo/selectors";
 import { loadDemo, saveDemo, loadPreferences, savePreferences, getEmergencySession, setEmergencySession } from "../src/lib/demo/persistence";
 import { useAppStore } from "../src/lib/store";
+import { applyLegacyPatch, projectLegacy } from "../src/lib/demo/legacy";
 
 class MemoryStorage implements Storage {
   values = new Map<string, string>();
@@ -13,6 +14,58 @@ class MemoryStorage implements Storage {
   removeItem(key: string) { this.values.delete(key); }
   setItem(key: string, value: string) { this.values.set(key, value); }
 }
+
+test("legacy_roundtrips_preserve_domain_only_task_facts_and_revisions", () => {
+  for (const id of ["after-visit", "dizziness"] as const) {
+    const demo = createScenario(id);
+    demo.tasks.find(t => t.id === "task-amlo")!.status = "snoozed";
+    expect(applyLegacyPatch(demo, structuredClone(projectLegacy(demo, null)))).toEqual(demo);
+  }
+});
+
+test("completeTask_changes_only_the_selected_task_and_is_idempotent", () => {
+  const demo = createScenario("after-visit");
+  demo.tasks.find(t => t.id === "task-amlo")!.status = "snoozed";
+  useAppStore.setState({ demo, ...projectLegacy(demo, null) });
+  useAppStore.getState().completeTask("task-ator");
+  const changed = useAppStore.getState().demo;
+  expect(changed.tasks.find(t => t.id === "task-ator")).toEqual({ ...demo.tasks.find(t => t.id === "task-ator"), status: "completed", revision: 2 });
+  expect(changed.tasks.filter(t => t.id !== "task-ator")).toEqual(demo.tasks.filter(t => t.id !== "task-ator"));
+  useAppStore.getState().completeTask("task-ator");
+  expect(useAppStore.getState().demo).toEqual(changed);
+  useAppStore.getState().completeTask("task-fixture-attention");
+  expect(useAppStore.getState().demo.tasks.find(t => t.id === "task-fixture-attention")).toEqual({ ...demo.tasks.find(t => t.id === "task-fixture-attention"), status: "completed", revision: 2 });
+  useAppStore.getState().resetDemo();
+});
+
+test("persistence_rejects_unknown_journey_phase", () => {
+  const demo = createScenario("dizziness");
+  const invalid = { ...demo, episodes: [{ ...demo.episodes[0], phase: "not-a-phase" }] };
+  const storage = new MemoryStorage();
+  storage.setItem("caremate-v4", JSON.stringify(invalid));
+  expect(loadDemo(storage)).toEqual({ ok: false, code: "UnsupportedSnapshot" });
+});
+
+test("legacy_contact_edits_survive_when_the_task_status_is_already_completed", () => {
+  const demo = createScenario("after-visit");
+  demo.tasks.push({ ...demo.tasks[3], id: "task-contact", kind: "contact", status: "completed", contactOutcome: "left_message" });
+  const next = applyLegacyPatch(demo, { tasks: projectLegacy(demo, null).tasks, contactStatus: "contacted", contactNote: "Reached clinic" });
+  expect(next.tasks.find(t => t.id === "task-contact")).toEqual({ ...demo.tasks[4], contactOutcome: "contacted", contactNote: "Reached clinic", revision: 2 });
+  expect(next.tasks.slice(0, 4)).toEqual(demo.tasks.slice(0, 4));
+});
+
+test("persistence_rejects_cross_collection_source_id_collisions", () => {
+  for (const collection of ["observations", "medicationDoses", "appointments", "reports"] as const) {
+    const demo = createScenario("dizziness");
+    demo[collection].push({ ...demo[collection][0], id: "rec-dizzy" } as never);
+    const storage = new MemoryStorage();
+    storage.setItem("caremate-v4", JSON.stringify(demo));
+    expect(loadDemo(storage), collection).toEqual({ ok: false, code: "UnsupportedSnapshot" });
+  }
+  const demo = createScenario("dizziness");
+  demo.checkIns.push({ id: "rec-dizzy", patientId: "may", draftId: "draft-1", occurredAt: demo.clock, enteredAt: demo.clock, mood: "okay", body: "well", note: "", revision: 1 });
+  expect(saveDemo(new MemoryStorage(), demo)).toEqual({ ok: false, code: "UnsupportedSnapshot" });
+});
 
 test("context_is_explicit_and_legacy_data_is_not_reassigned", () => {
   const storage = new MemoryStorage();

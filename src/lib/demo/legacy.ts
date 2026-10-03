@@ -4,6 +4,21 @@ import type { DemoState, HealthEpisode } from "./types";
 import { emptyAnswers } from "./fixtures";
 import { clockParts } from "../clock";
 
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== "object" || a === null || typeof b !== "object" || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  return Object.keys(left).length === Object.keys(right).length && Object.keys(left).every(key => Object.hasOwn(right, key) && sameValue(left[key], right[key]));
+}
+
+function revised<T extends { revision: number }>(prior: T | undefined, candidate: T): T {
+  if (!prior) return { ...candidate, revision: 1 };
+  const content = { ...candidate, revision: prior.revision };
+  return sameValue(prior, content) ? prior : { ...candidate, revision: prior.revision + 1 };
+}
+
 export function currentEpisode(demo: DemoState) { return demo.episodes.at(-1); }
 
 export function projectLegacy(demo: DemoState, activeEmergencyEpisodeId: string | null) {
@@ -45,9 +60,12 @@ export function projectLegacy(demo: DemoState, activeEmergencyEpisodeId: string 
 export function applyLegacyPatch(demo: DemoState, patch: Partial<AppState>): DemoState {
   // Legacy routes cannot write May's clinical data under David's actor identity.
   if (demo.context.actorId !== "may") return demo;
+  const before = projectLegacy(demo, null);
+  // A projection is lossy. Only changed display fields express an edit intent.
+  patch = Object.fromEntries(Object.entries(patch).filter(([key, value]) => !(key in before) || !sameValue(value, before[key as keyof typeof before]))) as Partial<AppState>;
   const next = { ...demo };
   if (patch.clock) next.clock = patch.clock;
-  if (patch.readingNotes) next.observations = next.observations.map(o => o.id in patch.readingNotes! ? { ...o, note: patch.readingNotes![o.id], revision: o.revision + 1 } : o);
+  if (patch.readingNotes) next.observations = next.observations.map(o => o.id in patch.readingNotes! ? revised(o, { ...o, note: patch.readingNotes![o.id] }) : o);
   const episodeKeys = ["answers", "step", "phase", "episodeSaved", "messages", "followup"] as const;
   if (episodeKeys.some(key => key in patch)) {
     const prior = currentEpisode(next);
@@ -58,8 +76,8 @@ export function applyLegacyPatch(demo: DemoState, patch: Partial<AppState>): Dem
     if (patch.episodeSaved !== undefined) e.saved = patch.episodeSaved;
     if (patch.followup) e.followup = patch.followup;
     e.disposition = e.answers.urgent && !["none", "unsure"].includes(e.answers.urgent) ? "urgent" : e.answers.urgent === "unsure" ? "uncertain" : e.answers.change === "worse" ? "worsening" : e.saved ? "ordinary" : "open";
-    e.revision += 1;
-    next.episodes = prior ? next.episodes.map(old => old.id === e.id ? e : old) : [...next.episodes, e];
+    const updatedEpisode = revised(prior, e);
+    next.episodes = prior ? next.episodes.map(old => old.id === e.id ? updatedEpisode : old) : [...next.episodes, updatedEpisode];
     if (patch.messages) {
       const session = next.assistantSessions.find(s => s.episodeId === e.id);
       const updated = { id: session?.id ?? `session-${e.id}`, patientId: "may" as const, episodeId: e.id, messages: patch.messages, status: e.saved ? "completed" as const : "active" as const, draft: session?.draft ?? "" };
@@ -69,7 +87,7 @@ export function applyLegacyPatch(demo: DemoState, patch: Partial<AppState>): Dem
   if (patch.records) {
     next.healthRecords = patch.records.filter(r => r.personId === "michelle").map(r => {
       const prior = demo.healthRecords.find(old => old.id === r.id);
-      return { id: r.id, patientId: "may", category: prior?.category ?? (r.kind === "symptom" ? "body" : r.kind === "report" || r.kind === "measurement" ? "measurements" : r.kind === "medication" ? "medication" : "private"), source: r.provenance.source, occurredAt: r.occurredAt, enteredAt: r.enteredAt, title: r.title, text: r.summary, kind: r.kind, revision: (prior?.revision ?? 0) + 1 };
+      return revised(prior, { ...prior, id: r.id, patientId: "may", category: prior?.category ?? (r.kind === "symptom" ? "body" : r.kind === "report" || r.kind === "measurement" ? "measurements" : r.kind === "medication" ? "medication" : "private"), source: r.provenance.source, occurredAt: r.occurredAt, enteredAt: r.enteredAt, title: r.title, text: r.summary, kind: r.kind, revision: prior?.revision ?? 1 });
     });
     // A legacy summary replaced the original row. Retain the source as evidence.
     const referenced = new Set([...next.episodes, ...next.tasks, ...next.events, ...next.memories, ...next.briefs].flatMap(e => e.sourceRecordIds));
@@ -77,21 +95,30 @@ export function applyLegacyPatch(demo: DemoState, patch: Partial<AppState>): Dem
   }
   if (patch.doses) next.medicationDoses = next.medicationDoses.map(d => {
     const row = patch.doses!.find(r => r.id === d.id);
-    return row ? { ...d, status: row.status, occurredAt: row.occurrenceAt, enteredAt: row.enteredAt, revision: d.revision + 1 } : d;
+    return row ? revised(d, { ...d, status: row.status, occurredAt: row.occurrenceAt, enteredAt: row.enteredAt }) : d;
   });
   if (patch.memories) next.memories = next.memories.map(m => {
     const row = patch.memories!.find(r => r.id === m.id);
-    return row ? { ...m, value: row.value, detail: row.detail, enabled: !row.excluded, pendingConfirm: !!row.pendingConfirm, revision: m.revision + 1 } : m;
+    return row ? revised(m, { ...m, value: row.value, detail: row.detail, enabled: !row.excluded, pendingConfirm: !!row.pendingConfirm }) : m;
   });
   if (patch.questions) next.questions = patch.questions.map(q => ({ id: q.id, patientId: "may", text: q.text, selected: q.added }));
-  if (patch.tasks) next.tasks = patch.tasks.filter(t => t.personId === "michelle").map(t => {
+  if (patch.tasks || patch.contactStatus !== undefined || patch.contactNote !== undefined) next.tasks = (patch.tasks ?? before.tasks).filter(t => t.personId === "michelle").map(t => {
     const prior = demo.tasks.find(old => old.id === t.id);
-    return { id: t.id, patientId: "may", ownerId: prior?.ownerId ?? "may", proposedOwnerId: prior?.proposedOwnerId ?? null, kind: t.kind === "bp" || t.kind === "followup" ? "check-in" : t.kind, status: t.state === "not_due" ? "scheduled" : t.state, scheduledAt: `${t.date}T${t.time}:00+08:00`, sourceRecordIds: prior?.sourceRecordIds ?? [], shareCategory: prior?.shareCategory ?? (t.kind === "medication" ? "medication" : t.kind === "bp" ? "measurements" : t.kind === "appointment" || t.kind === "accompany" ? "appointments" : "body"), contactOutcome: t.kind === "contact" ? patch.contactStatus ?? prior?.contactOutcome ?? "not_contacted" : null, contactNote: t.kind === "contact" ? patch.contactNote ?? prior?.contactNote ?? "" : "", title: t.title, revision: (prior?.revision ?? 0) + 1 };
+    const displayed = before.tasks.find(row => row.id === t.id);
+    const kind = prior && displayed?.kind === t.kind ? prior.kind : t.kind === "bp" || t.kind === "followup" ? "check-in" : t.kind;
+    const status = prior && displayed?.state === t.state ? prior.status : t.state === "not_due" ? "scheduled" : t.state;
+    const scheduledAt = prior && displayed?.date === t.date && displayed?.time === t.time ? prior.scheduledAt : `${t.date}T${t.time}:00+08:00`;
+    return revised(prior, { ...prior, id: t.id, patientId: "may", ownerId: prior?.ownerId ?? "may", proposedOwnerId: prior?.proposedOwnerId ?? null,
+      kind, status, scheduledAt, sourceRecordIds: prior?.sourceRecordIds ?? [],
+      shareCategory: prior?.shareCategory ?? (t.kind === "medication" ? "medication" : t.kind === "bp" ? "measurements" : t.kind === "appointment" || t.kind === "accompany" ? "appointments" : "body"),
+      contactOutcome: t.id === "task-contact" && patch.contactStatus !== undefined ? patch.contactStatus : prior ? prior.contactOutcome : kind === "contact" ? "not_contacted" : null,
+      contactNote: t.id === "task-contact" && patch.contactNote !== undefined ? patch.contactNote : prior?.contactNote ?? "",
+      title: t.title, revision: prior?.revision ?? 1 });
   });
   if (patch.appointments || patch.bookingStatus) next.appointments = next.appointments.map(a => {
     const row = patch.appointments?.find(r => r.id === a.id);
-    return { ...a, scheduledAt: row?.at ?? a.scheduledAt, bookingStatus: patch.bookingStatus ?? a.bookingStatus, revision: a.revision + 1 };
+    return revised(a, { ...a, scheduledAt: row?.at ?? a.scheduledAt, bookingStatus: patch.bookingStatus ?? a.bookingStatus });
   });
-  if (patch.sharingStopped) next.grants = next.grants.map(g => g.recipientId === "david" ? { ...g, status: "revoked", revision: g.revision + 1, updatedAt: next.clock } : g);
+  if (patch.sharingStopped) next.grants = next.grants.map(g => g.recipientId === "david" && g.status !== "revoked" ? revised(g, { ...g, status: "revoked", updatedAt: next.clock }) : g);
   return next;
 }
