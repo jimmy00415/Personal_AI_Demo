@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { briefText, contactScript, symptomLine } from "../src/lib/selectors";
 import { emptyAnswers } from "../src/lib/seed";
-import { OPENING_CLOCK } from "../src/lib/types";
+import { createScenario } from "../src/lib/demo/scenarios";
+import { projectLegacy } from "../src/lib/demo/legacy";
+import { useAppStore } from "../src/lib/store";
 
 test.describe("symptom line follows the answers", () => {
   test("the recorded default reads as before", () => {
@@ -37,15 +39,14 @@ test("the clinic script matches the onset the user chose", () => {
 });
 
 test("the consultation brief repeats the answers the user actually gave", () => {
-  const brief = briefText(
-    {
-      clock: OPENING_CLOCK,
-      episodeSaved: true,
-      answers: { ...emptyAnswers, urgent: "none", onset: "just-now", change: "worse", medGap: "forgot" },
-      questions: [],
-    },
-    "zh-HK",
-  );
+  const previous = useAppStore.getState();
+  const demo = createScenario("dizziness");
+  demo.episodes[0].step = "summary";
+  demo.episodes[0].answers = { ...emptyAnswers, urgent: "none", onset: "just-now", change: "worse", medGap: "forgot" };
+  useAppStore.setState({ demo, ...projectLegacy(demo, null), showToast: () => {} });
+  useAppStore.getState().saveSummary();
+  const brief = briefText(useAppStore.getState(), "zh-HK");
+  useAppStore.setState(previous);
   expect(brief).toContain("比剛才嚴重");
   expect(brief).not.toContain("較剛才減輕");
   expect(brief).toContain("狀態未確定");

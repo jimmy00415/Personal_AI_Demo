@@ -1,5 +1,5 @@
 import { formatIcsUtc } from "../clock";
-import type { CareTask } from "./types";
+import type { ActionResult, CareTask } from "./types";
 import { validInstant } from "./care";
 
 const escape = (s: string) => s.replace(/\\/g, "\\\\").replace(/\r?\n/g, "\\n").replace(/;/g, "\\;").replace(/,/g, "\\,");
@@ -14,4 +14,13 @@ export function downloadTaskIcs(task: CareTask): boolean {
   const anchor = document.createElement("a"); anchor.href = url; anchor.download = `caremate-${task.id}.ics`; anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   return true;
+}
+
+/** A rejected clipboard operation is not a successful copy. UI owns the manual fallback. */
+export async function copyText(text: string): Promise<ActionResult<void>> {
+  try {
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) return { ok: false, code: "clipboard-unavailable" };
+    await navigator.clipboard.writeText(text);
+    return { ok: true, value: undefined };
+  } catch { return { ok: false, code: "clipboard-rejected" }; }
 }

@@ -126,7 +126,7 @@ test("cancelled_appointment_has_safe_brief_print_and_today_recovery", async ({ p
   await start(page, createScenario("next-morning"));
   await page.getByTestId("book-cancel").click(); await page.getByTestId("book-cancel-confirm").click();
   await page.goto("/brief"); await expect(page.getByTestId("brief-appointment-unavailable")).toBeVisible();
-  await page.getByTestId("visit-copy").click();
+  await expect(page.getByTestId("visit-copy")).toHaveCount(0);
   await page.goto("/print"); await expect(page.getByTestId("print-view")).toContainText("沒有已安排的本地行程");
   await expect(page.getByTestId("print-view")).not.toContainText("9月22日");
   await page.goto("/"); await expect(page.getByTestId("today-page")).toBeVisible();

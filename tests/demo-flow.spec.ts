@@ -8,7 +8,8 @@ async function reset(page: import("@playwright/test").Page) {
   await expect(page.getByTestId("today-page")).toBeVisible({ timeout: 5000 });
 }
 
-test("main journey: dizziness, med gap, brief, follow-up, next morning", async ({ page }) => {
+test("main journey: dizziness, med gap, brief, follow-up, next morning", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.addInitScript(() => {
       if (sessionStorage.getItem("caremate-test-initialised")) return;
       sessionStorage.setItem("caremate-test-initialised", "1");
@@ -54,11 +55,14 @@ test("main journey: dizziness, med gap, brief, follow-up, next morning", async (
   await page.getByText("返回就診摘要").click();
   await expect(page.getByTestId("brief-questions")).toContainText("HbA1c");
 
+  await expect(page.getByTestId("visit-copy")).toBeDisabled();
+  await page.getByTestId("brief-confirm").click();
   await page.getByTestId("visit-copy").click();
   await expect(page.getByTestId("toast")).toContainText("已複製");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("May Chan");
   await page.getByTestId("visit-print").click();
   await expect(page.getByTestId("print-view")).toBeVisible();
-  await expect(page.getByTestId("print-view")).toContainText("陳美玲");
+  await expect(page.getByTestId("print-view")).toContainText("May Chan");
   await expect(page.getByTestId("print-view")).not.toContainText("陳麗華");
   await page.goBack();
 

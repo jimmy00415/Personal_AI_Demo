@@ -99,7 +99,7 @@ const line = (label: Localized, suffix: string): Localized => ({ zh: `${label.zh
 /** This is the only shared read boundary. Never rehydrate canonical entities from its IDs. */
 export function selectSharingProjection(state: DemoState, patientId: PatientId, recipientId: RecipientId): SharingProjection {
   const grant = state.grants.filter(g => g.patientId === patientId && g.recipientId === recipientId).sort((a, b) => b.revision - a.revision)[0];
-  const out: SharingProjection = { patientId, recipientId, level: null, grantRevision: grant?.revision ?? null, categories: [], status: grant?.status ?? "not-granted", summary: [], records: [], healthRecords: [], observations: [], checkIns: [], medicationDoses: [], appointments: [], reports: [], tasks: [], events: [], briefs: [], sourceRecordIds: [] };
+  const out: SharingProjection = { patientId, recipientId, level: null, grantRevision: grant?.revision ?? null, categories: [], status: grant?.status ?? "not-granted", summary: [], sourceRevisions: {}, records: [], healthRecords: [], observations: [], checkIns: [], medicationDoses: [], appointments: [], reports: [], tasks: [], events: [], briefs: [], sourceRecordIds: [] };
   if (!grant || grant.status !== "active") return out;
   out.level = grant.level; out.categories = [...grant.categories];
   const allowed = (c: ShareCategory | "private") => c !== "private" && grant.categories.includes(c);
@@ -142,7 +142,7 @@ export function selectSharingProjection(state: DemoState, patientId: PatientId, 
     out.reports = reports.map(r => ({ ...r, results: r.results.map(({ id, name, value, unit }) => ({ id, name, value, unit })) }));
     out.medicationDoses = doses.map(d => ({ ...d }));
     out.checkIns = allowed("body") || allowed("mood") ? checkIns.map(c => ({ id: c.id, patientId, occurredAt: c.occurredAt, enteredAt: c.enteredAt, revision: c.revision, ...(allowed("body") ? { body: c.body } : {}), ...(allowed("mood") ? { mood: c.mood } : {}) })) : [];
-    out.records = mine(state.healthRecords).filter(r => allowed(r.category)).map(r => {
+    out.records = mine(state.healthRecords).filter(r => allowed(r.category) && !r.supersededByRecordId).map(r => {
       // Organised prose and check-in-derived records can mix categories. Recompose from typed fields.
       const checkIn = r.derivedFromCheckIn && checkIns.find(c => c.id === r.derivedFromCheckIn!.id && c.revision === r.derivedFromCheckIn!.revision);
       const text = checkIn && r.category === "body" ? messages[`sharing.body.${checkIn.body}`] : checkIn && r.category === "mood" ? messages[`sharing.mood.${checkIn.mood}`] : r.source === "organised" || r.derivedFromCheckIn ? messages[`sharing.${r.category as ShareCategory}`] : r.text;
@@ -150,6 +150,8 @@ export function selectSharingProjection(state: DemoState, patientId: PatientId, 
     });
     out.healthRecords = out.records;
   }
+  const provenance = [...mine(state.healthRecords).filter(r => allowed(r.category) && !r.supersededByRecordId), ...observations, ...reports, ...doses, ...out.appointments, ...(allowed("body") || allowed("mood") ? checkIns : [])];
+  out.sourceRevisions = Object.fromEntries(provenance.map(r => [r.id, r.revision]));
   out.sourceRecordIds = [...new Set([...out.records, ...out.observations, ...out.checkIns, ...out.medicationDoses, ...out.reports, ...out.appointments].map(r => r.id))];
   out.tasks = tasks.map(t => ({ id: t.id, patientId, ownerId: t.ownerId, proposedOwnerId: t.proposedOwnerId, kind: t.kind, status: t.status, scheduledAt: t.scheduledAt, shareCategory: t.shareCategory, revision: t.revision, sourceRecordIds: t.sourceRecordIds.filter(id => out.sourceRecordIds.includes(id)), title: full && t.kind === "after-visit" ? t.title : messages[`sharing.${t.shareCategory as ShareCategory}`] }));
   out.events = out.events.map(e => ({ ...e, sourceRecordIds: state.events.find(raw => raw.id === e.id)!.sourceRecordIds.filter(id => out.sourceRecordIds.includes(id)) }));

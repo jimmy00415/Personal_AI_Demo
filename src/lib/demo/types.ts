@@ -156,6 +156,11 @@ export interface BriefPacket extends PatientEntity {
   sourceRecordIds: string[];
   sourceRevisions: Record<string, number>;
   includeMood: boolean;
+  /** Persistent review provenance; old v4 packets are regenerated as drafts. */
+  sectionEdits?: Record<string, Localized>;
+  sourceFingerprint?: string;
+  contentFingerprint?: string;
+  supplementsNeedReview?: boolean;
 }
 export interface MemoryItem extends PatientEntity {
   value: Localized; detail: Localized; source: SourceClass; enteredAt: string; enabled: boolean; pendingConfirm: boolean; sourceRecordIds: string[]; revision: number;
@@ -173,6 +178,8 @@ export interface SharingProjection {
   categories: ShareCategory[];
   status: "active" | "revoked" | "not-granted";
   summary: Localized[];
+  /** Safe provenance metadata for the selected categories, including summary-only content. */
+  sourceRevisions: Record<string, number>;
   records: HealthRecord[];
   sourceRecordIds: string[];
   healthRecords: HealthRecord[];

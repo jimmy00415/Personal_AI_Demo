@@ -4,22 +4,18 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
-import { formatDateTime, formatShortDate, formatTime } from "@/lib/clock";
-import { briefText, contactScript, michelleBp, bpAverage, michelleAppt, symptomLine } from "@/lib/selectors";
-import { allergy, michelleMeds, report } from "@/lib/seed";
-import { Button, SourceLabel } from "@/components/system";
-import { downloadTaskIcs } from "@/lib/demo/exports";
+import { formatDateTime } from "@/lib/clock";
+import { michelleAppt } from "@/lib/selectors";
+import { Button } from "@/components/system";
+import { copyText, downloadTaskIcs } from "@/lib/demo/exports";
+import { buildBrief, prepareBriefExport } from "@/lib/demo/brief";
+import { BriefReview } from "./BriefReview";
 import { ReminderTimePicker } from "@/features/care/ReminderTimePicker";
 
 export function BriefPage() {
   const { t, locale, L } = useI18n();
   const clock = useAppStore((s) => s.clock);
-  const answers = useAppStore((s) => s.answers);
-  const questions = useAppStore((s) => s.questions);
-  const customQuestion = useAppStore((s) => s.customQuestion);
-  const setCustomQuestion = useAppStore((s) => s.setCustomQuestion);
-  const addCustomQuestion = useAppStore((s) => s.addCustomQuestion);
-  const toggleQuestion = useAppStore((s) => s.toggleQuestion);
+  const demo = useAppStore(s => s.demo);
   const setContact = useAppStore((s) => s.setContact);
   const contactStatus = useAppStore((s) => s.contactStatus);
   const contactNote = useAppStore((s) => s.contactNote);
@@ -34,31 +30,27 @@ export function BriefPage() {
   const bookingStatus = useAppStore((s) => s.bookingStatus);
   const followupTask = useAppStore(s => s.demo.tasks.find(task => task.id === "task-morning"));
   const persistenceError = useAppStore(s => s.persistenceError);
+  const [scriptFallback, setScriptFallback] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
   const [reminderError, setReminderError] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
   const [note, setNote] = useState(contactNote);
   const [pick, setPick] = useState("08:30");
-  const avg = bpAverage();
   const appt = michelleAppt(appointments);
 
-  async function copy(text: string) {
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        showToast(t("brief.copied"));
-        return;
-      }
-    } catch {
-      /* fallback */
-    }
-    const el = document.createElement("textarea");
-    el.value = text;
-    document.body.appendChild(el);
-    el.select();
-    const ok = document.execCommand("copy");
-    el.remove();
-    if (ok) showToast(t("brief.copied"));
+  const appointment = demo.appointments.find(a => a.status === "scheduled");
+  const packet = appointment ? buildBrief(demo, demo.context.patientId, { appointmentId: appointment.id, includeMood: false }) : null;
+  const script = packet?.ok ? packet.value.sections.filter(s => ["body", "average"].includes(s.id)).map(s => L(s.text)).join("\n") : "";
+  const personalBrief = demo.briefs.filter(b => b.appointmentId === appointment?.id && b.recipientId === "may").at(-1);
+  const exportable = personalBrief ? prepareBriefExport(demo, personalBrief.id) : null;
+  const exportScript = exportable?.ok ? exportable.value.sections.filter(s => ["body", "average"].includes(s.id)).map(s => L(s.text)).join("\n") : "";
+  async function copyScript() {
+    if (!personalBrief) return;
+    const current = useAppStore.getState().prepareBriefExport(personalBrief.id);
+    if (!current.ok) return;
+    const result = await copyText(current.value.sections.filter(s => ["body", "average"].includes(s.id)).map(s => L(s.text)).join("\n"));
+    setScriptFallback(!result.ok);
+    if (result.ok) showToast(t("brief.copied"));
   }
 
   function downloadIcs() {
@@ -74,100 +66,11 @@ export function BriefPage() {
   return (
     <div className="mx-auto max-w-[720px]" data-testid="visit-brief">
       <p className="text-[14px] text-ink-soft">
-        {t("ask.person")} · {t("brief.title")} · {formatDateTime(clock, locale)}
+        {t("packet.patient")} · May Chan · {t("brief.title")} · {formatDateTime(clock, locale)}
       </p>
       <h1 className="mt-2 text-[30px] leading-tight">{t("brief.title")}</h1>
 
-      <section className="mt-8">
-        <h2 className="text-[15px] text-ink-soft">{t("brief.s1")}</h2>
-        <p className="mt-2 text-[17px]">{t("brief.issue")}</p>
-        <div className="mt-1">
-          <SourceLabel source="organised" />
-        </div>
-      </section>
-      <section className="mt-8">
-        <h2 className="text-[15px] text-ink-soft">{t("brief.s2")}</h2>
-        <p className="mt-2">
-          {episodeSaved ? symptomLine(answers, locale) : locale === "en" ? "Morning note: a bit dizzy." : "上午8:35：今朝有少少頭暈。"}
-        </p>
-        <div className="mt-1">
-          <SourceLabel source="user" />
-        </div>
-      </section>
-      <section className="mt-8">
-        <h2 className="text-[15px] text-ink-soft">{t("brief.s3")}</h2>
-        <ul className="mt-2 space-y-1 text-[16px]" data-testid="brief-bp">
-          {michelleBp().map((r) => (
-            <li key={r.id}>
-              {formatShortDate(r.occurredAt, locale)} {formatTime(r.occurredAt, locale)} · {r.systolic}/{r.diastolic} mmHg
-            </li>
-          ))}
-          <li>
-            {t("ask.f.avg")} · {avg.systolic}/{avg.diastolic} mmHg
-          </li>
-        </ul>
-        <div className="mt-1">
-          <SourceLabel source="home-measure" />
-        </div>
-      </section>
-      <section className="mt-8">
-        <h2 className="text-[15px] text-ink-soft">{t("brief.s4")}</h2>
-        <ul className="mt-2 space-y-1">
-          {michelleMeds.map((m) => (
-            <li key={m.id}>
-              {m.name} · {L(m.dose)}
-            </li>
-          ))}
-          <li>
-            {allergy.name} · {t("source.user")}
-          </li>
-          {answers.medGap === "taken-unlogged" ? <li data-testid="brief-med-correction">{t("ask.f.medV")}</li> : null}
-        </ul>
-        <div className="mt-1">
-          <SourceLabel source="user" />
-        </div>
-      </section>
-      <section className="mt-8">
-        <h2 className="text-[15px] text-ink-soft">{t("brief.s5")}</h2>
-        <ul className="mt-2 space-y-1">
-          {report.results.map((r) => (
-            <li key={r.id}>
-              {L(r.name)} {r.value} {r.unit}
-            </li>
-          ))}
-        </ul>
-        <div className="mt-1">
-          <SourceLabel source="imported" />
-        </div>
-        <Link href="/report" className="mt-3 inline-flex min-h-11 items-center text-brand" data-testid="open-report">
-          {t("brief.openReport")}
-        </Link>
-      </section>
-      <section className="mt-8">
-        <h2 className="text-[15px] text-ink-soft">{t("brief.s6")}</h2>
-        <ul className="mt-2 space-y-2" data-testid="brief-questions">
-          {questions.filter((q) => q.added).map((q) => (
-            <li key={q.id} className="flex items-start justify-between gap-3">
-              <span>{L(q.text)}</span>
-              <button type="button" className="text-[14px] text-ink-soft" onClick={() => toggleQuestion(q.id)}>
-                {t("brief.removeQ")}
-              </button>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-1">
-          <SourceLabel source="user" />
-        </div>
-        <div className="mt-3 flex gap-2">
-          <input
-            value={customQuestion}
-            onChange={(e) => setCustomQuestion(e.target.value)}
-            placeholder={t("brief.customPh")}
-            className="min-h-12 flex-1 rounded-[12px] bg-surface-secondary px-3"
-          />
-          <Button onClick={addCustomQuestion}>{t("brief.addQ")}</Button>
-        </div>
-      </section>
+      <BriefReview />
 
       {episodeSaved ? (
         <div className="mt-8">
@@ -181,17 +84,18 @@ export function BriefPage() {
         </div>
       ) : null}
 
-      <section className="mt-10 rounded-[20px] bg-surface px-5 py-5">
+      {episodeSaved && script ? <section className="mt-10 rounded-[20px] bg-surface px-5 py-5">
         <h2 className="text-[18px]">{t("brief.script")}</h2>
-        <p className="measure mt-3 leading-relaxed">{contactScript(locale, answers)}</p>
+        <p className="measure mt-3 leading-relaxed">{script}</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => copy(contactScript(locale, answers))}>
+          <Button variant="secondary" disabled={!exportable?.ok} onClick={() => void copyScript()}>
             {t("brief.copyScript")}
           </Button>
           <Button variant="plain" onClick={() => setLogOpen((v) => !v)}>
             {t("brief.logContact")}
           </Button>
         </div>
+        {scriptFallback && exportable?.ok ? <div><p role="status">{t("packet.copyFailed")}</p><textarea aria-label={t("brief.copyScript")} readOnly value={exportScript} className="min-h-32 w-full border p-3" onFocus={event => event.target.select()} /></div> : null}
         {logOpen ? (
           <div className="mt-4 space-y-2" data-testid="contact-form">
             {(["not_contacted", "left_message", "contacted"] as const).map((st) => (
@@ -208,17 +112,7 @@ export function BriefPage() {
             <Button onClick={() => setContact(contactStatus, note)}>{t("common.save")}</Button>
           </div>
         ) : null}
-      </section>
-
-      <div className="mt-8 flex flex-wrap gap-2">
-        <Button data-testid="visit-copy" variant="secondary" onClick={() => copy(briefText(useAppStore.getState(), locale))}>
-          {t("brief.copy")}
-        </Button>
-        <Link href="/print" data-testid="visit-print" className="inline-flex min-h-11 items-center rounded-[10px] bg-surface-secondary px-4">
-          {t("brief.print")}
-        </Link>
-      </div>
-      <p className="mt-2 text-[13px] text-ink-soft">{t("brief.printNote")}</p>
+      </section> : null}
 
       {episodeSaved && followup === "none" ? (
         <section className="mt-10" data-testid="followup-offer">
@@ -262,7 +156,7 @@ export function BriefPage() {
       ) : null}
 
       {reminderError ? <p role="alert">{t(reminderError === "past-time" || reminderError === "invalid-time" ? `care.${reminderError}` : "care.error")}</p> : null}
-      {appt ? <p className="mt-8 text-[14px] text-ink-soft">{L(appt.title)} · {formatDateTime(appt.at, locale)}</p> : <p className="mt-8" data-testid="brief-appointment-unavailable">{t("book.noScheduled")} <Link href="/book" className="inline-flex min-h-11 items-center text-brand">{t("book.title")}</Link></p>}
+      {appt ? <p className="mt-8 text-[14px] text-ink-soft">{L(appt.title)} · {formatDateTime(appt.at, locale)}</p> : null}
       <p className="mt-6 text-[13px] text-ink-soft">{t("ask.boundary")}</p>
     </div>
   );

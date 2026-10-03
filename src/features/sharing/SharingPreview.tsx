@@ -6,8 +6,10 @@ import { Button } from "@/components/system";
 import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
 import { formatDateTime } from "@/lib/clock";
-import { selectSharingProjection, sharedExportText, sharingRows } from "@/lib/demo/sharing";
+import { selectSharingProjection, sharingRows } from "@/lib/demo/sharing";
 import type { RecipientId, SharingProjection } from "@/lib/demo/types";
+import { BriefReview } from "@/features/brief/BriefReview";
+import { PrintView } from "@/features/brief/PrintView";
 import { EventDetail } from "@/features/notifications/EventDetail";
 
 export function SharingPreview({ projection, interactive = false, eventId }: { projection: SharingProjection; interactive?: boolean; eventId?: string | null }) {
@@ -19,20 +21,9 @@ export function SharingPreview({ projection, interactive = false, eventId }: { p
   const [receiptRevision, setReceiptRevision] = useState(projection.grantRevision);
   const rows = sharingRows(projection, locale);
   const selected = rows.find(r => r.id === selectedId);
-  const currentExport = sharedExportText(useAppStore.getState().demo, projection.patientId, projection.recipientId, locale);
   const mayAccompany = useAppStore(s => s.demo.context.actorId === "david") && projection.recipientId === "david";
   const active = projection.status === "active";
   const detail = active && projection.level !== "alerts-only";
-  const copy = async () => {
-    useAppStore.getState().syncFromStorage();
-    const state = useAppStore.getState().demo;
-    const latest = sharedExportText(state, projection.patientId, projection.recipientId, locale);
-    if (!latest.ok) { setExportOpen(false); setReceipt(t("sharing.unavailable")); return; }
-    const revision = selectSharingProjection(state, projection.patientId, projection.recipientId).grantRevision;
-    setReceiptRevision(revision);
-    try { await navigator.clipboard.writeText(latest.value); setReceipt(t("sharing.copied")); }
-    catch { setReceipt(t("sharing.exportFailed")); setExportOpen(true); }
-  };
   if (interactive && mayAccompany && eventId) return <EventDetail key={`${eventId}-${projection.grantRevision}`} eventId={eventId} onBack={() => router.push("/notifications")} />;
   return <section data-testid="sharing-preview" className="space-y-6">
     <p>{t("sharing.identity")}</p>
@@ -49,8 +40,8 @@ export function SharingPreview({ projection, interactive = false, eventId }: { p
       </> : null}
     </>}
     {interactive && selected && detail ? <section aria-label={t("sharing.detail")} data-testid="shared-detail" className="border border-brand p-4"><h2>{selected.title}</h2><p>{selected.text}</p><Button variant="secondary" onClick={() => setSelectedId(null)}>{t("sharing.cancel")}</Button></section> : null}
-    {interactive && detail ? <div className="flex flex-wrap gap-3"><Button data-testid="shared-copy" onClick={() => void copy()}>{t("sharing.export")}</Button><Button variant="secondary" data-testid="shared-export-open" onClick={() => { useAppStore.getState().syncFromStorage(); setExportOpen(true); }}>{t("sharing.exportOpen")}</Button></div> : null}
-    {interactive && exportOpen && detail && currentExport.ok ? <div data-testid="shared-export"><p>{t("sharing.exportNote")}</p><textarea className="min-h-64 w-full border p-3" aria-label={t("sharing.exportTitle")} readOnly value={currentExport.value} /><Button variant="secondary" onClick={() => setExportOpen(false)}>{t("sharing.cancel")}</Button></div> : null}
+    {interactive && detail ? <div className="flex flex-wrap gap-3"><Button data-testid="shared-copy" onClick={() => { useAppStore.getState().syncFromStorage(); setExportOpen(true); }}>{t("packet.reviewAction")}</Button><Button variant="secondary" data-testid="shared-export-open" onClick={() => { useAppStore.getState().syncFromStorage(); setExportOpen(true); }}>{t("sharing.exportOpen")}</Button></div> : null}
+    {interactive && exportOpen && detail ? <div data-testid="shared-export"><BriefReview recipientId={projection.recipientId} /><Button variant="secondary" onClick={() => setExportOpen(false)}>{t("sharing.cancel")}</Button></div> : null}
     {receipt && active && receiptRevision === projection.grantRevision ? <p role="status">{receipt}</p> : null}
   </section>;
 }
@@ -65,5 +56,6 @@ function CurrentSharedView({ recipientId }: { recipientId: RecipientId }) {
   const eventId = useSearchParams().get("event");
   const demo = useAppStore(s => s.demo);
   const projection = selectSharingProjection(demo, demo.context.patientId, recipientId);
+  if (projection.status === "active" && projection.level !== "alerts-only" && (pathname === "/brief" || pathname === "/print")) return <div data-testid="shared-view">{pathname === "/print" ? <PrintView /> : <BriefReview recipientId={recipientId} />}</div>;
   return <div data-testid="shared-view" className="mx-auto max-w-3xl space-y-6"><h1 className="text-3xl">{t("sharing.shared")}</h1><p>{t("sharing.readonly")}</p><SharingPreview key={`${pathname}-${recipientId}`} projection={projection} eventId={eventId} interactive /><p className="text-sm">{t("sharing.local")}</p></div>;
 }

@@ -26,6 +26,7 @@ export function TodayPage() {
   const demo = useAppStore((s) => s.demo);
   const todayView = selectToday(demo);
   const dailyEntry = todayView.dailyEntry;
+  const previsit = todayView.hero.kind === "prepare-visit" ? demo.briefs.filter(b => b.appointmentId === todayView.hero.sourceId && b.recipientId === "may").at(-1) : undefined;
   const [why, setWhy] = useState(false);
   const legacyHero = todayHero(clock, episodeSaved, answers.nextMorning, bookingStatus, phase);
   const emotionalHelp = demo.episodes.find(e => e.id === todayView.hero.sourceId)?.helpKind === "emotional";
@@ -47,6 +48,7 @@ export function TodayPage() {
       <section data-testid="daily-brief" className="mt-8">
         <h2 className="text-[24px] leading-snug">{t(hero.titleKey)}</h2>
         <p className="measure mt-3 text-[17px] leading-relaxed text-ink-muted">{t(hero.bodyKey)}</p>
+        {hero.kind === "prepare" && previsit ? <p data-testid="today-previsit-status">{t(previsit.status === "confirmed" ? "packet.confirmed" : "packet.draft")}</p> : null}
         {hero.kind === "prepare" && bookingStatus === "booked" ? <p className="mt-3 text-ink-muted">{t("today.heroBooked")}</p> : null}
 
         {hero.kind === "urgent" ? (

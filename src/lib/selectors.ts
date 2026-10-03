@@ -1,8 +1,10 @@
-import { selectSharingProjection, sharedExportText } from "./demo/sharing";
-import { appointments, bpReadings, michelleMeds, report, currentDemo } from "./seed";
+import { buildBrief, briefToText } from "./demo/brief";
+import type { DemoState } from "./demo/types";
+import { selectSharingProjection } from "./demo/sharing";
+import { appointments, bpReadings, currentDemo } from "./seed";
 import { translate } from "./i18n";
 import { selectBpAverage } from "./demo/selectors";
-import { clockParts, formatDateTime, formatShortDate, formatTime } from "./clock";
+import { clockParts } from "./clock";
 import type { Answers, Appointment, BookingStatus, JourneyPhase } from "./types";
 import type { Locale, Localized } from "./types";
 
@@ -82,67 +84,15 @@ export function todayHero(
   return { kind: "open" as const, titleKey: "today.heroOpen" as const, bodyKey: "today.heroOpenBody" as const };
 }
 
-export function briefText(
-  state: {
-    clock: string;
-    episodeSaved: boolean;
-    answers: Answers;
-    questions: { added: boolean; text: Localized }[];
-    appointments?: Appointment[];
-  },
-  locale: Locale,
-) {
-  if (currentDemo().context.actorId === "david") {
-    const result = sharedExportText(currentDemo(), "may", "david", locale);
-    return result.ok ? result.value : translate("sharing.empty", locale);
-  }
-  const L = (x: Localized) => (locale === "en" ? x.en : x.zh);
-  const avg = bpAverage();
-  const lines = [
-    locale === "en" ? "Consultation brief — Michelle Chan" : "就診摘要 — 陳美玲",
-    formatDateTime(state.clock, locale),
-    "",
-    locale === "en" ? "1. What to discuss" : "1. 今天希望處理的問題",
-    L({
-      zh: "今早頭暈，最近血壓較之前高，想了解是否需要提早評估。",
-      en: "Dizziness this morning and recent blood pressure higher than before — ask whether an earlier review is needed.",
-    }),
-    locale === "en" ? "Source: organised by CareMate" : "來源：康伴整理",
-    "",
-    locale === "en" ? "2. Symptoms and timing" : "2. 症狀及時間",
-    state.episodeSaved
-      ? locale === "en"
-        ? `Dizziness: ${symptomLine(state.answers, locale)}. Note at 8:35 am: “A bit dizzy this morning.”`
-        : `頭暈：${symptomLine(state.answers, locale)}。上午8:35記錄「今朝有少少頭暈。」`
-      : L({ zh: "上午8:35記錄「今朝有少少頭暈。」尚未完成整理。", en: "Note at 8:35 am: “A bit dizzy this morning.” Not yet organised." }),
-    locale === "en" ? "Source: added by you" : "來源：本人補充",
-    "",
-    locale === "en" ? "3. Recent blood pressure" : "3. 最近血壓紀錄",
-    ...michelleBp().map((r) => `${formatShortDate(r.occurredAt, locale)} ${formatTime(r.occurredAt, locale)} · ${r.systolic}/${r.diastolic} mmHg`),
-    `${locale === "en" ? "7-day average" : "近7日平均"} · ${avg.systolic}/${avg.diastolic} mmHg`,
-    locale === "en" ? "Source: home measurement" : "來源：家居量度",
-    "",
-    locale === "en" ? "4. Medicines and allergy" : "4. 已儲存的用藥及過敏資料",
-    ...michelleMeds.map((m) => `${m.name} ${L(m.dose)}`),
-    `Penicillin · ${locale === "en" ? "entered by you" : "由你先前輸入"}`,
-    state.answers.medGap === "taken-unlogged"
-      ? L({ zh: "9月14日晚上Atorvastatin：你表示已服藥（補記）。", en: "Atorvastatin, 14 September evening: you say it was taken (noted by you)." })
-      : state.answers.medGap === "not-taken"
-        ? L({ zh: "9月14日晚上Atorvastatin：你表示沒有服藥。", en: "Atorvastatin, 14 September evening: you say it was not taken." })
-        : L({ zh: "9月14日晚上Atorvastatin：紀錄空缺，狀態未確定。", en: "Atorvastatin, 14 September evening: no confirmation; status unknown." }),
-    locale === "en" ? "Source: added by you" : "來源：本人補充",
-    "",
-    locale === "en" ? "5. Recent lab results" : "5. 新近化驗結果",
-    ...report.results.map((r) => `${L(r.name)} ${r.value} ${r.unit}`),
-    locale === "en" ? "Source: imported report" : "來源：已匯入報告",
-    "",
-    locale === "en" ? "6. Questions" : "6. 希望向醫生確認的問題",
-    ...state.questions.filter((q) => q.added).map((q) => `• ${L(q.text)}`),
-    "",
-    locale === "en" ? "Appointment" : "覆診時間",
-    michelleAppt(state.appointments) ? formatDateTime(michelleAppt(state.appointments)!.at, locale) : translate("book.noScheduled", locale),
-  ];
-  return lines.join("\n");
+/** Compatibility entry; canonical sources alone compose the preview packet. */
+export function briefText(state: { demo?: DemoState; clock: string; episodeSaved: boolean; answers: Answers; questions: { added: boolean; text: Localized }[]; appointments?: Appointment[] }, locale: Locale) {
+  const demo = state.demo ?? currentDemo();
+  const appointment = demo.appointments.find(a => a.patientId === demo.context.patientId && a.status === "scheduled");
+  if (!appointment) return translate("book.noScheduled", locale);
+  const recipientId = demo.context.actorId === "david" ? "david" : undefined;
+  const prior = demo.briefs.filter(b => b.appointmentId === appointment.id && b.recipientId === (recipientId ?? "may")).at(-1);
+  const result = buildBrief(demo, demo.context.patientId, { appointmentId: appointment.id, includeMood: prior?.includeMood ?? true, recipientId });
+  return result.ok ? briefToText(result.value, locale) : translate("packet.unavailable", locale);
 }
 
 const SCRIPT_ONSET: Record<NonNullable<Answers["onset"]>, Localized> = {

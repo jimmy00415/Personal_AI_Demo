@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { NIDDK_A1C, report } from "@/lib/seed";
+import { NIDDK_A1C } from "@/lib/seed";
 import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
 import { Button } from "@/components/system";
@@ -11,10 +11,14 @@ export function ReportPage() {
   const { t, L } = useI18n();
   const expanded = useAppStore((s) => s.expandedLab);
   const setExpandedLab = useAppStore((s) => s.setExpandedLab);
-  const questions = useAppStore((s) => s.questions);
+  const demo = useAppStore(s => s.demo);
+  const questions = demo.questions.filter(q => q.patientId === demo.context.patientId);
+  const report = useAppStore(s => s.demo.reports.find(r => r.patientId === s.demo.context.patientId));
   const toggleQuestion = useAppStore((s) => s.toggleQuestion);
   const [source, setSource] = useState(false);
   const [refOpen, setRefOpen] = useState(false);
+
+  if (!report) return <p>{t("sharing.measurementsEmpty")}</p>;
 
   return (
     <div className="mx-auto max-w-[720px]" data-testid="lab-page">
@@ -57,10 +61,7 @@ export function ReportPage() {
       </div>
       {source ? (
         <pre className="mt-3 overflow-x-auto rounded-[14px] bg-surface-secondary p-4 text-[14px] whitespace-pre-wrap">
-          {`Blood test · 13 Sep 2026
-HbA1c 6.4 %
-LDL cholesterol 2.7 mmol/L
-Creatinine 71 μmol/L`}
+          {L(report.originalText)}
         </pre>
       ) : null}
       {refOpen ? (
@@ -77,8 +78,8 @@ Creatinine 71 μmol/L`}
           .map((q) => (
             <div key={q.id} className="flex items-center justify-between gap-3">
               <span>{L(q.text)}</span>
-              <Button data-testid={`add-q-${q.id}`} variant={q.added ? "secondary" : "primary"} onClick={() => toggleQuestion(q.id)}>
-                {q.added ? t("brief.removeQ") : t("report.add")}
+              <Button data-testid={`add-q-${q.id}`} variant={q.selected ? "secondary" : "primary"} onClick={() => toggleQuestion(q.id)}>
+                {q.selected ? t("brief.removeQ") : t("report.add")}
               </Button>
             </div>
           ))}

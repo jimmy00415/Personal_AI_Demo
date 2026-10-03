@@ -1,6 +1,8 @@
 "use client";
 
 import { create } from "zustand";
+import { ensurePrevisitDraft, openBriefDraft, reconcileBriefs, confirmBrief, updateBriefDraft, prepareBriefExport } from "./demo/brief";
+import type { BriefPacket, RecipientId } from "./demo/types";
 import { setConsent, revokeConsent, createAttentionEvent, respondToEvent, resolveEvent, invalidateUnavailableRequests, shareCategories, sharingLevels, type ConsentInput } from "./demo/sharing";
 import type {
   Answers,
@@ -82,6 +84,11 @@ export interface AppState {
 }
 
 interface Actions {
+  editConsultationQuestion: (id: string, text: string) => ActionResult<void>;
+  openBriefDraft: (appointmentId: string, recipientId?: RecipientId) => ActionResult<void>;
+  confirmBrief: (id: string, reviewedFingerprint: string) => ActionResult<void>;
+  updateBriefDraft: (id: string, patch: Parameters<typeof updateBriefDraft>[2]) => ActionResult<void>;
+  prepareBriefExport: (id: string, recipientId?: RecipientId) => ActionResult<BriefPacket>;
   createAttentionEvent: (input: Parameters<typeof createAttentionEvent>[1]) => ActionResult<void>;
   respondToEvent: (eventId: string, response: Parameters<typeof respondToEvent>[2]) => ActionResult<void>;
   resolveEvent: (eventId: string, actorId: ActorId) => ActionResult<void>;
@@ -361,7 +368,8 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
   // Compatibility fields are recalculated, never persisted or independently authoritative.
   const set = (patch: Partial<AppState>) => {
     const current = get();
-    const demo = patch.demo ?? applyLegacyPatch(current.demo, patch);
+    let demo = reconcileBriefs(patch.demo ?? applyLegacyPatch(current.demo, patch));
+    for (const appointment of demo.appointments) demo = ensurePrevisitDraft(demo, appointment.id);
     let activeEmergencyEpisodeId = patch.activeEmergencyEpisodeId === undefined ? current.activeEmergencyEpisodeId : patch.activeEmergencyEpisodeId;
     if (patch.phase === "urgent_help" && demo.context.actorId === "may") activeEmergencyEpisodeId = currentEpisode(demo)?.id ?? null;
     rawSet({ ...patch, demo, activeEmergencyEpisodeId, ...projectLegacy(demo, activeEmergencyEpisodeId) });
@@ -393,6 +401,21 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
   };
   return {
   ...world(),
+  editConsultationQuestion: (id, text) => {
+    get().syncFromStorage();
+    const demo = get().demo;
+    if (demo.context.actorId !== "may") return { ok: false, code: "patient-only" };
+    if (!text.trim() || text.trim().length > 500 || !demo.questions.some(q => q.id === id && q.patientId === demo.context.patientId)) return { ok: false, code: "invalid-question" };
+    return applyCare({ ok: true, value: { ...demo, questions: demo.questions.map(q => q.id === id ? { ...q, text: { zh: text.trim(), en: text.trim() } } : q) } });
+  },
+  openBriefDraft: (id, recipient) => { get().syncFromStorage(); return applyCare(openBriefDraft(get().demo, id, recipient)); },
+  updateBriefDraft: (id, patch) => { get().syncFromStorage(); return applyCare(updateBriefDraft(get().demo, id, patch)); },
+  confirmBrief: (id, reviewedFingerprint) => {
+    get().syncFromStorage();
+    if (get().demo.briefs.find(b => b.id === id)?.contentFingerprint !== reviewedFingerprint) return { ok: false, code: "review-required" };
+    return applyCare(confirmBrief(get().demo, id));
+  },
+  prepareBriefExport: (id, recipient) => { get().syncFromStorage(); return prepareBriefExport(get().demo, id, recipient); },
   syncFromStorage: () => {
     if (typeof window === "undefined") return;
     const loaded = loadDemo(window.localStorage);

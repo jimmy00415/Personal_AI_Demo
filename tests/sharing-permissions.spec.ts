@@ -3,6 +3,7 @@ import { createScenario } from "../src/lib/demo/scenarios";
 import { setConsent, revokeConsent, selectSharingProjection, sharedExportText, shareCategories, sharingLevels, recipients } from "../src/lib/demo/sharing";
 import { useAppStore } from "../src/lib/store";
 import { isDemoState } from "../src/lib/demo/persistence";
+import { openBriefDraft, confirmBrief } from "../src/lib/demo/brief";
 import { createAccompanyTask } from "../src/lib/demo/care";
 import type { DemoState } from "../src/lib/demo/types";
 
@@ -138,11 +139,15 @@ test("open manual export and detail update on cross-tab downgrade, actor survive
   const demo = createScenario("caregiver-alert"); demo.grants[0].level = "full"; demo.grants[0].categories = ["body", "measurements"];
   await start(page, demo, "/family");
   await page.getByTestId("shared-record-bp-16").click(); await page.getByTestId("shared-export-open").click();
-  await expect(page.getByTestId("shared-export").locator("textarea")).toContainText("151/94");
+  await page.getByTestId("brief-confirm").click();
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => { throw new Error("denied"); } } }));
+  await page.getByTestId("visit-copy").click();
+  await expect(page.getByTestId("brief-copy-fallback")).toContainText("151/94");
   const may = await context.newPage(); await may.goto("/dev"); await may.getByTestId("perspective-may").click(); await may.goto("/sharing");
   await may.getByTestId("level-summary").check(); await may.getByTestId("category-measurements").uncheck(); await may.getByTestId("sharing-review").click(); await may.getByTestId("sharing-confirm").click();
   await expect(page.getByTestId("shared-detail")).toHaveCount(0);
-  await expect(page.getByTestId("shared-export").locator("textarea")).not.toContainText("151/94");
+  await expect(page.getByTestId("brief-copy-fallback")).toHaveCount(0);
+  await expect(page.getByTestId("shared-export")).not.toContainText("151/94");
   await page.reload(); await expect(page.getByTestId("shared-view")).toBeVisible();
   await expect(page.getByTestId("shared-view")).not.toContainText("mmHg");
   await may.reload(); await expect(may.getByTestId("sharing-page")).toBeVisible();
@@ -161,9 +166,12 @@ test("320px English preview, cancellation, other-recipient export and clipboard 
   expect((await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!))).grants).toEqual([]);
   await page.getByTestId("sharing-review").click(); await page.getByTestId("sharing-confirm").click();
   await page.getByTestId("shared-copy").click(); await expect(page.getByTestId("shared-export")).toBeVisible();
-  await expect(page.getByRole("status").filter({ hasText: "Could not copy" })).toBeVisible();
-  await expect(page.getByTestId("shared-export").locator("textarea")).toContainText("151/94");
-  await expect(page.getByTestId("shared-export").locator("textarea")).not.toContainText("Atorvastatin");
+  await page.getByTestId("brief-confirm").click();
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => { throw new Error("denied"); } } }));
+  await page.getByTestId("visit-copy").click();
+  await expect(page.getByTestId("brief-copy-fallback")).toContainText("151/94");
+  await expect(page.getByTestId("brief-copy-result")).toContainText("Could not copy");
+  await expect(page.getByTestId("brief-copy-fallback")).not.toContainText("Atorvastatin");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect((await page.getByTestId("shared-copy").boundingBox())!.height).toBeGreaterThanOrEqual(44);
   expect(requests).toEqual([]);
@@ -195,7 +203,10 @@ test("storage failure keeps new consent and revocation usable in memory", async 
   await page.getByTestId("sharing-review").click(); await page.getByTestId("sharing-confirm").click();
   await expect(page.getByTestId("persistence-error")).toBeVisible();
   await page.getByTestId("shared-export-open").click();
-  await expect(page.getByTestId("shared-export").locator("textarea")).toContainText("151/94");
+  await page.getByTestId("brief-confirm").click();
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => { throw new Error("denied"); } } }));
+  await page.getByTestId("visit-copy").click();
+  await expect(page.getByTestId("brief-copy-fallback")).toContainText("151/94");
   await page.getByTestId("sharing-revoke").click(); await page.getByTestId("revoke-confirm").click();
   await expect(page.getByTestId("shared-empty")).toBeVisible();
   await expect(page.getByTestId("shared-copy")).toHaveCount(0);
@@ -232,7 +243,13 @@ for (const collision of ["revoke", "summary", "category", "disjoint", "event-onl
       const local = useAppStore.getState().demo;
       // Another local change gave this event the same revision as the remote revocation.
       const unsaved = { ...local, context: { actorId: "david" as const, patientId: "may" as const, perspective: "caregiver" as const }, events: local.events.map(e => ({ ...e, status: "acknowledged" as const, revision: 2 })) };
-      unsaved.briefs = ["may", "david"].map(recipientId => ({ id: `collision-brief-${recipientId}`, patientId: "may", recipientId: recipientId as "may" | "david", appointmentId: "appt-gp", appointmentRevision: 1, grantRevision: recipientId === "may" ? null : 2, status: "confirmed", revision: 1, generatedAt: initial.clock, confirmedAt: initial.clock, sections: [], questions: [], sourceRecordIds: ["bp-16"], sourceRevisions: { "bp-16": 1 }, includeMood: false }));
+      // Valid confirmations now carry packet/source fingerprints; legacy hand-written cached text is a draft.
+      let reviewed: DemoState = { ...unsaved, context: { actorId: "may", patientId: "may", perspective: "patient" } };
+      for (const recipientId of [undefined, "david"] as const) {
+        reviewed = value(openBriefDraft(reviewed, "appt-gp", recipientId));
+        reviewed = value(confirmBrief(reviewed, reviewed.briefs.at(-1)!.id));
+      }
+      unsaved.briefs = reviewed.briefs;
       useAppStore.setState({ demo: unsaved });
       const remote = collision === "revoke" ? value(revokeConsent(initial, "grant-david")) : value(setConsent(initial, { patientId: "may", recipientId: "david", level: collision === "summary" ? "summary" : "full", categories: collision === "disjoint" ? ["mood"] : collision === "event-only" ? ["body", "measurements", "medication"] : ["body"] }));
       remote.events = remote.events.map(e => ({ ...e, status: "revoked", revision: 2 }));

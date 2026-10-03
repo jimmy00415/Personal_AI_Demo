@@ -1,9 +1,8 @@
-import { briefText } from "./selectors";
-import type { Locale } from "./types";
+import { briefToText, prepareBriefExport } from "./demo/brief";
+import type { DemoState, Locale, RecipientId } from "./demo/types";
 
-export function buildVisitBrief(
-  state: Parameters<typeof briefText>[0],
-  locale: Locale,
-) {
-  return briefText(state, locale);
+/** Confirmed local handoff; caller passes the latest state at the action boundary. */
+export function buildVisitBrief(state: DemoState, briefId: string, locale: Locale, recipientId?: RecipientId) {
+  const packet = prepareBriefExport(state, briefId, recipientId);
+  return packet.ok ? { ok: true as const, value: briefToText(packet.value, locale) } : packet;
 }
