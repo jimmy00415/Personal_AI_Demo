@@ -36,6 +36,7 @@ export const messages = {
   "checkin.talk": { zh: "準備找人傾談", en: "Prepare to talk with someone" },
   "checkin.selected": { zh: "已選擇", en: "Selected" },
   "checkin.error": { zh: "請先選擇心情及身體狀態，再審閱保存。", en: "Choose mood and body feelings, then review before saving." },
+  "checkin.missing": { zh: "找不到這項草稿或紀錄。請返回今日選擇記錄，其他草稿仍然保留。", en: "This draft or record was not found. Return to Today to choose a record; your other drafts are still kept." },
   "observation.add": { zh: "新增血壓量度", en: "Add blood pressure reading" },
   "observation.systolic": { zh: "收縮壓（mmHg）", en: "Systolic (mmHg)" },
   "observation.diastolic": { zh: "舒張壓（mmHg）", en: "Diastolic (mmHg)" },

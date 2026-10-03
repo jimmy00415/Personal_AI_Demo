@@ -164,7 +164,7 @@ export function HealthPage() {
             </p>
           </div>
         ) : null}
-        {checkIn ? <div data-testid="checkin-detail"><CheckInReview record={checkIn} /><Button className="mt-6" data-testid="checkin-correct" onClick={() => { editCheckIn(checkIn.id); router.push("/check-in"); }}>{t("checkin.correct")}</Button></div> : null}
+        {checkIn ? <div data-testid="checkin-detail"><CheckInReview record={checkIn} /><Button className="mt-6" data-testid="checkin-correct" onClick={() => { editCheckIn(checkIn.id); router.push(`/check-in?draft=${encodeURIComponent(checkIn.draftId)}`); }}>{t("checkin.correct")}</Button></div> : null}
         {adding ? <ObservationForm key="new-observation" onCancel={close} /> : null}
         {reading ? (
           <div data-testid="bp-detail">

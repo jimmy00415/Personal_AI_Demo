@@ -345,7 +345,7 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     const demo = get().demo;
     const record = demo.checkIns.find(r => r.id === id && r.patientId === demo.context.patientId);
     if (!record || demo.context.actorId !== "may") return;
-    const draft: CheckInDraft = { id: record.draftId, patientId: record.patientId, occurredAt: record.occurredAt, mood: record.mood, body: record.body, note: record.note, step: "mood", taskId: null, revision: record.revision };
+    const draft: CheckInDraft = demo.drafts.find(d => d.id === record.draftId && d.patientId === record.patientId) ?? { id: record.draftId, patientId: record.patientId, occurredAt: record.occurredAt, mood: record.mood, body: record.body, note: record.note, step: "mood", taskId: null, revision: record.revision };
     set({ demo: { ...demo, drafts: [...demo.drafts.filter(d => d.id !== draft.id), draft] }, selectedRecordId: null });
     savePersisted(get());
   },

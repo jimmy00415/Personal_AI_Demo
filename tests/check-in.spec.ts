@@ -150,6 +150,64 @@ test("historical_checkin_correction_has_receipt_without_new_daily_draft", async 
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!).drafts)).toEqual([]);
 });
 
+test("historical_correction_selects_requested_draft_and_restores_with_competing_daily_draft", async ({ page }) => {
+  const state = createScenario("routine-day");
+  state.checkIns.push({ id: "checkin-yesterday", patientId: "may", draftId: "draft-yesterday", occurredAt: "2026-09-15T08:00:00+08:00", enteredAt: "2026-09-15T08:00:00+08:00", mood: "low", body: "tired", note: "昨天的補充", revision: 1 });
+  await page.addInitScript(demo => {
+    if (!localStorage.getItem("caremate-v4")) localStorage.setItem("caremate-v4", JSON.stringify(demo));
+  }, state);
+  await page.goto("/check-in");
+  await page.getByTestId("mood-stressed").click();
+  await page.getByTestId("checkin-next").click();
+  await page.getByTestId("body-well").click();
+  await page.getByTestId("checkin-next").click();
+  await page.getByLabel("本人補充（可留空）").fill("今天尚未保存的補充");
+  const original = await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!).drafts[0]);
+  await page.getByTestId("checkin-leave").click();
+  await page.getByTestId("nav-health").click();
+  await page.getByTestId("health-tab-records").click();
+  await page.getByTestId("checkin-record-checkin-yesterday").click();
+  await page.getByTestId("checkin-correct").click();
+  await expect(page.getByTestId("mood-low")).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("mood-okay").click();
+  await page.getByTestId("checkin-next").click();
+  await expect(page.getByTestId("body-tired")).toHaveAttribute("aria-pressed", "true");
+  await page.reload();
+  await expect(page.getByTestId("body-tired")).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("checkin-leave").click();
+  await expect(page.getByTestId("today-page")).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/check-in\?draft=draft-yesterday$/);
+  await expect(page.getByTestId("body-tired")).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("checkin-leave").click();
+  await expect(page.getByTestId("today-page")).toBeVisible();
+  await page.getByTestId("nav-health").click();
+  await page.getByTestId("health-tab-records").click();
+  await page.getByTestId("checkin-record-checkin-yesterday").click();
+  await page.getByTestId("checkin-correct").click();
+  await expect(page.getByTestId("body-tired")).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("checkin-next").click();
+  await expect(page.getByLabel("本人補充（可留空）")).toHaveValue("昨天的補充");
+  await page.getByTestId("checkin-next").click();
+  await expect(page.getByTestId("checkin-review")).toContainText("9月15日");
+  await page.getByTestId("checkin-save").click();
+  await expect(page.getByTestId("checkin-receipt")).toContainText("心情一般");
+  await page.reload();
+  await expect(page.getByTestId("checkin-receipt")).toContainText("9月15日");
+  const persisted = await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!));
+  expect(persisted.checkIns).toEqual([{ ...state.checkIns[0], mood: "okay", revision: 2 }]);
+  expect(persisted.drafts).toEqual([original]);
+  await page.getByTestId("checkin-receipt").getByRole("link", { name: "今日", exact: true }).click();
+  await page.getByTestId("daily-check-in").click();
+  await expect(page.getByLabel("本人補充（可留空）")).toHaveValue("今天尚未保存的補充");
+});
+
+test("missing_explicit_draft_does_not_open_or_create_an_unrelated_daily_draft", async ({ page }) => {
+  await start(page, "/check-in?draft=unknown");
+  await expect(page.getByTestId("checkin-missing")).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!).drafts)).toEqual([]);
+});
+
 test("keyboard_checkin_works_in_english_large_text_and_reduced_motion", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
   await page.emulateMedia({ reducedMotion: "reduce" });
