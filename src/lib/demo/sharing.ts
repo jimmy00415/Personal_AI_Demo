@@ -117,7 +117,7 @@ export function selectSharingProjection(state: DemoState, patientId: PatientId, 
   });
   if (!detail) return out;
   const checkIns = mine(state.checkIns);
-  const bodyCheckIn = checkIns.at(-1);
+  const bodyCheckIn = checkIns.filter(c => Date.parse(c.occurredAt) <= Date.parse(state.clock)).toSorted((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
   const episode = mine(state.episodes).filter(e => e.saved && e.helpKind !== "emotional").at(-1);
   if (allowed("body")) out.summary.push(bodyCheckIn ? messages[`sharing.body.${bodyCheckIn.body}`] : episode?.answers.change ? messages[`sharing.bodyChange.${episode.answers.change}`] : messages[mine(state.healthRecords).some(r => r.category === "body") ? "sharing.bodyRecorded" : "sharing.bodyEmpty"]);
   if (allowed("mood")) out.summary.push(bodyCheckIn ? messages[`sharing.mood.${bodyCheckIn.mood}`] : messages["sharing.moodEmpty"]);

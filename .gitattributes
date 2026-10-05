@@ -1,0 +1,3 @@
+# Preserve the byte hashes of captured traces, reports, review records and adapters.
+docs/superpowers/evidence/2026-10-04/task-10/** -text
+docs/superpowers/evidence/2026-10-04/task-11/researcher/assets/** -text

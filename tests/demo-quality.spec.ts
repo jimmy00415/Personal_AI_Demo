@@ -3,9 +3,10 @@ import { expect, test, type Page } from "@playwright/test";
 test.describe.configure({ timeout: 60_000 });
 
 async function clearWorld(page: Page) {
-  await page.addInitScript(() => {
+  await page.goto('/about');
+  await page.evaluate(() => {
     localStorage.removeItem("caremate-v4");
-    if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
+    localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
     sessionStorage.removeItem("caremate-v4-emergency");
   });
 }
@@ -161,5 +162,5 @@ test("the whole recording journey runs without console errors", async ({ page })
   await expect(page.getByTestId("book-receipt")).toBeVisible();
   await page.getByTestId("nav-today").click();
   await expect(page.getByTestId("daily-brief")).toContainText("本地覆診行程已更新");
-  expect(errors.filter((e) => !/favicon|Next.js Dev Tools/i.test(e)), errors.join("\n")).toHaveLength(0);
+  expect(errors, errors.join("\n")).toHaveLength(0);
 });

@@ -105,7 +105,7 @@ for (const locale of ['zh-HK', 'en'] as const) for (const liteMode of [false, tr
   await page.emulateMedia({ reducedMotion: liteMode ? 'reduce' : 'no-preference' });
   await page.addInitScript(({ locale, liteMode }) => { if (!localStorage.getItem('caremate-v4-preferences')) localStorage.setItem('caremate-v4-preferences', JSON.stringify({ locale, liteMode, introComplete: false })); }, { locale, liteMode });
   await page.goto('/welcome'); await expect(page.getByTestId('welcome-page')).toBeVisible();
-  await page.screenshot({ path: `.superpowers/sdd/2026-10-03-caremate-complete-demo/task-9-${locale}-${liteMode}-welcome.png`, fullPage: true });
+  await page.screenshot({ path: test.info().outputPath(`task-9-${locale}-${liteMode}-welcome.png`), fullPage: true });
   await page.getByRole('button', { name: locale === 'en' ? 'Start using CareMate' : '開始使用康伴', exact: true }).click();
   await expect(page.getByTestId('today-page')).toContainText(locale === 'en' ? 'May Chan' : 'May／陳女士');
   await expect(page.locator('html')).toHaveAttribute('lang', locale);
@@ -119,7 +119,7 @@ for (const locale of ['zh-HK', 'en'] as const) for (const liteMode of [false, tr
   expect(headerBoxes.every(box => box.height >= 44 && box.width >= 44)).toBe(true);
   await page.getByRole('link', { name: locale === 'en' ? 'Settings' : '設定', exact: true }).click();
   await expect(page.getByTestId('settings-page')).toBeVisible();
-  await page.screenshot({ path: `.superpowers/sdd/2026-10-03-caremate-complete-demo/task-9-${locale}-${liteMode}-settings.png`, fullPage: true });
+  await page.screenshot({ path: test.info().outputPath(`task-9-${locale}-${liteMode}-settings.png`), fullPage: true });
   await page.getByRole('link', { name: locale === 'en' ? 'What CareMate remembers' : '康伴記住的資料', exact: true }).click();
   await expect(page.getByTestId('memory-page')).toBeVisible();
   await page.getByTestId('memory-mem-pen').click();
@@ -127,19 +127,19 @@ for (const locale of ['zh-HK', 'en'] as const) for (const liteMode of [false, tr
   await page.getByLabel(locale === 'en' ? 'Corrected content' : '更正內容').fill('𠮷龘 • May 香港，patient note');
   await page.evaluate(() => document.fonts.ready);
   await expect(page.getByRole('button', { name: locale === 'en' ? 'Save' : '儲存', exact: true })).toBeInViewport();
-  await page.screenshot({ path: `.superpowers/sdd/2026-10-03-caremate-complete-demo/task-9-${locale}-${liteMode}-edit.png`, fullPage: true });
+  await page.screenshot({ path: test.info().outputPath(`task-9-${locale}-${liteMode}-edit.png`), fullPage: true });
   await page.getByRole('button', { name: locale === 'en' ? 'Save' : '儲存', exact: true }).click();
   await expect(page.getByTestId('memory-mem-pen')).toContainText('𠮷龘');
   await page.getByTestId('memory-mem-pen').click(); await page.getByRole('button', { name: locale === 'en' ? 'Stop using for personalisation' : '不再用作個人化建議', exact: true }).click();
   await page.getByRole('button', { name: locale === 'en' ? 'Stop using for personalisation' : '不再用作個人化建議', exact: true }).click();
   await page.reload(); await expect(page.getByTestId('memory-mem-pen')).toContainText(locale === 'en' ? 'Personalisation stopped' : '已停止個人化');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: `.superpowers/sdd/2026-10-03-caremate-complete-demo/task-9-${locale}-${liteMode}-memory.png`, fullPage: true });
+  await page.screenshot({ path: test.info().outputPath(`task-9-${locale}-${liteMode}-memory.png`), fullPage: true });
   await page.getByRole('link', { name: /Back to Settings|返回設定/ }).click();
   await page.getByRole('link', { name: locale === 'en' ? 'Sharing permissions' : '分享權限', exact: true }).click();
   await page.getByTestId('recipient-doctor-wong').check(); await page.getByTestId('level-summary').check(); await page.getByTestId('category-body').check(); await page.getByTestId('sharing-review').click();
   await page.getByTestId('sharing-confirm').click(); await expect(page.getByTestId('sharing-review')).toBeVisible();
-  await page.screenshot({ path: `.superpowers/sdd/2026-10-03-caremate-complete-demo/task-9-${locale}-${liteMode}-sharing.png`, fullPage: true });
+  await page.screenshot({ path: test.info().outputPath(`task-9-${locale}-${liteMode}-sharing.png`), fullPage: true });
 });
 
 test('stored_caregiver_context_does_not_flash_patient_memory_during_hydration', async ({ page }) => {

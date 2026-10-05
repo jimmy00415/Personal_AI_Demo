@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { Suspense, useState } from "react";
+import Link, { useLinkStatus } from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
 import { formatDate, formatTime } from "@/lib/clock";
@@ -10,6 +11,7 @@ import { bpAverage, symptomLine } from "@/lib/selectors";
 import { Button } from "@/components/system";
 import { getLocalAssistantReply, getMemoryExplanation, hasSymptomContext, isMemoryQuestion, isMemoryExplanation } from "@/lib/demo/local-assistant";
 import { EmergencyHelp } from "./EmergencyHelp";
+import { episodeBloodPressure } from "@/lib/demo/episode-facts";
 
 const urgentOpts = [
   { id: "chest-breath", key: "ask.u1" as const, urgent: true },
@@ -37,6 +39,19 @@ const medOpts = [
 ];
 
 export function AskPage() {
+  return <Suspense fallback={null}><AskContent /></Suspense>;
+}
+
+function NavigationLabel({ label, pendingText }: { label: string; pendingText: string }) {
+  const { pending } = useLinkStatus();
+  return <span className="grid gap-1 py-2"><span>{label}</span><span data-testid="assistant-navigation-pending" role="status" aria-hidden={!pending} className={pending ? "visible" : "invisible"}>{pendingText}</span></span>;
+}
+
+function AskContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const moodEntry = searchParams.get("topic") === "mood";
+  const requestedMessage = searchParams.get("message");
   const { t, L, locale } = useI18n();
   const step = useAppStore((s) => s.step);
   const messages = useAppStore((s) => s.messages);
@@ -51,13 +66,23 @@ export function AskPage() {
   const setDraft = useAppStore(s => s.setAssistantDraft);
   const episode = demo.episodes.at(-1) ?? null;
   const isRecheck = episode?.id.startsWith("episode-recheck-");
-  const symptomFlow = hasSymptomContext(demo, episode);
+  const hasPhysicalContext = hasSymptomContext(demo, episode);
+  const symptomFlow = hasPhysicalContext && !moodEntry;
   const session = demo.assistantSessions.find(s => s.episodeId === episode?.id);
   const draft = session?.draft ?? "";
-  const lastInput = session?.messages.filter(m => m.role === "user" && m.id.startsWith("u-free")).at(-1)?.text.en ?? "";
   const assistantContext = { context: demo.context, clock: demo.clock, locale, episode, records: demo.healthRecords, reports: demo.reports, memories: demo.memories.filter(m => m.enabled && m.patientId === demo.context.patientId), medicationDoses: demo.medicationDoses };
+  // Presentation intent never changes the retained episode or its unfinished question.
+  const moodStart = moodEntry ? messages.findLastIndex(m => m.role === "user" && m.id.startsWith("u-free") && getLocalAssistantReply(m.text.en, assistantContext).intent === "mood") : -1;
+  const visibleStart = requestedMessage === null ? moodStart : messages.findIndex(m => m.id === requestedMessage && m.role === "user" && m.id.startsWith("u-free"));
+  const history = moodEntry ? messages.slice(0, visibleStart < 0 ? messages.length : visibleStart) : [];
+  const visibleMessages = moodEntry ? (visibleStart < 0 ? [] : messages.slice(visibleStart)) : messages;
+  const lastInput = visibleMessages.filter(m => m.role === "user" && m.id.startsWith("u-free")).at(-1)?.text.en ?? "";
   const reply = lastInput ? getLocalAssistantReply(lastInput, assistantContext) : null;
   const currentPersonalisation = getMemoryExplanation(assistantContext);
+  const messageText = (msg: typeof messages[number]) => {
+    const previous = messages[messages.indexOf(msg) - 1];
+    return L(msg.role === "assistant" && isMemoryExplanation(msg.text) && previous?.id.startsWith("u-free") && isMemoryQuestion(previous.text.en) ? currentPersonalisation : msg.text);
+  };
   const [why, setWhy] = useState(false);
   const avg = bpAverage();
 
@@ -71,14 +96,14 @@ export function AskPage() {
   return (
     <div data-testid="chat-page" className="mx-auto max-w-2xl">
       <header className="mb-6">
-        <h1 className="text-[28px] leading-tight">{t(isRecheck ? "local.recheck" : symptomFlow ? "ask.title" : "local.assistantTitle")}</h1>
+        <h1 className="text-[28px] leading-tight">{t(moodEntry ? "local.assistantTitle" : isRecheck ? "local.recheck" : symptomFlow ? "ask.title" : "local.assistantTitle")}</h1>
         <p className="mt-1 text-[15px] text-ink-muted">{L(demo.profiles.find(p => p.id === demo.context.patientId)!.name)}</p>
         {symptomFlow && !isRecheck ? <p className="mt-2 text-[14px] text-ink-soft">{t("ask.context")}</p> : null}
       </header>
 
       <div className="space-y-5">
         <div className="space-y-5" data-testid="chat-log">
-          {messages.map((msg, index) => (
+          {visibleMessages.map((msg) => (
             <div key={msg.id} className={msg.role === "user" ? "flex justify-end" : ""}>
               <p
                 data-testid={msg.note ? "chat-correction" : undefined}
@@ -90,11 +115,14 @@ export function AskPage() {
                       : "measure leading-relaxed"
                 }
               >
-                {L(msg.role === "assistant" && isMemoryExplanation(msg.text) && messages[index - 1]?.id.startsWith("u-free") && isMemoryQuestion(messages[index - 1].text.en) ? currentPersonalisation : msg.text)}
+                {messageText(msg)}
               </p>
             </div>
           ))}
         </div>
+
+        {moodEntry && history.length ? <details data-testid="assistant-history" className="text-ink-muted"><summary className="min-h-11 cursor-pointer py-2">{t("local.previousConversation")}</summary><div className="mt-3 space-y-3">{history.map(msg => <p key={msg.id} className="measure">{messageText(msg)}</p>)}</div></details> : null}
+        {moodEntry && hasPhysicalContext ? <Link prefetch={false} href="/ask" data-testid="assistant-resume-symptoms" className="inline-flex min-h-11 items-center text-brand underline">{t("local.resumeSymptoms")}</Link> : null}
 
         {symptomFlow && step === "urgent" ? (
           <div>
@@ -110,7 +138,7 @@ export function AskPage() {
           <div className="space-y-3" data-testid="uncertain-branch">
             <p className="measure">{t("ask.uncertain")}</p>
             <p className="measure text-ink-muted">{t("ask.uncertainHelp")}</p>
-            <Link href="/brief" className="inline-flex min-h-12 items-center text-brand">
+            <Link prefetch={false} href="/brief" className="inline-flex min-h-12 items-center text-brand">
               {t("ask.contactNow")}
             </Link>
           </div>
@@ -119,14 +147,14 @@ export function AskPage() {
         {step === "worsening" ? (
           <div className="space-y-3" data-testid="worsening-branch">
             <p className="measure">{t("ask.worseAdvice")}</p>
-            <p className="text-[14px] text-ink-muted">{t("ask.medQ")}</p>
+            {symptomFlow ? <><p className="text-[14px] text-ink-muted">{t("ask.medQ")}</p>
             <div className="grid gap-2">
               {medOpts.map((opt) => (
                 <button key={opt.id} type="button" data-testid={`quick-reply-${opt.id}`} onClick={() => answer(opt.id)} className="min-h-12 rounded-[12px] bg-surface-secondary px-3 text-left">
                   {t(opt.key)}
                 </button>
               ))}
-            </div>
+            </div></> : null}
           </div>
         ) : null}
 
@@ -146,7 +174,7 @@ export function AskPage() {
           </div>
         ) : null}
 
-        {step === "summary" || step === "saved" ? (
+        {symptomFlow && (step === "summary" || step === "saved") ? (
           <section data-testid="structured-summary" className="rounded-[20px] bg-surface px-5 py-5">
             {answers.medGap === "taken-unlogged" ? (
               <div className="mb-5 rounded-[14px] bg-surface-secondary px-4 py-3" data-testid="med-receipt">
@@ -164,7 +192,7 @@ export function AskPage() {
             <h2 className="mt-6 text-[18px]">{t("ask.summaryTitle")}</h2>
             <dl className="mt-3 space-y-3 text-[15px]">
               <Row k={t("ask.f.dizzy")} v={symptomLine(answers, locale)} />
-              <Row k={t("ask.f.bp")} v="151/94 mmHg · 08:30" />
+              <Row k={t("ask.f.bp")} v={L(episodeBloodPressure(demo, episode ?? undefined))} />
               <Row k={t("ask.f.avg")} v={`${avg.systolic}/${avg.diastolic} mmHg`} />
               <Row k={t("ask.f.urgent")} v={t("ask.f.urgentV")} />
               <Row k={t("ask.f.med")} v={answers.medGap === "taken-unlogged" ? t("ask.f.medV") : answers.medGap === "not-taken" ? t("ask.medNot") : t("ask.medForgot")} />
@@ -182,10 +210,10 @@ export function AskPage() {
               </div>
             ) : (
               <div className="mt-5 flex flex-wrap gap-3">
-                <Link href="/brief" data-testid="prep-visit" className="inline-flex min-h-12 items-center rounded-[10px] bg-brand px-4 text-white">
+                <Link prefetch={false} href="/brief" data-testid="prep-visit" className="inline-flex min-h-12 items-center rounded-[10px] bg-brand px-4 text-white">
                   {t("ask.prep")}
                 </Link>
-                <Link href="/book" data-testid="ask-book" className="inline-flex min-h-12 items-center text-brand">
+                <Link prefetch={false} href="/book" data-testid="ask-book" className="inline-flex min-h-12 items-center text-brand">
                   {t("today.book")}
                 </Link>
               </div>
@@ -199,7 +227,14 @@ export function AskPage() {
         onSubmit={(e) => {
           e.preventDefault();
           const text = draft;
+          const nextReply = getLocalAssistantReply(text, assistantContext);
           sendFreeText(text);
+          if (nextReply.intent === "mood") router.replace("/ask?topic=mood");
+          else if (moodEntry && visibleMessages.length === 0 && nextReply.disposition !== "urgent") {
+            const updated = useAppStore.getState();
+            const emitted = updated.messages.findLast(m => m.role === "user" && m.id.startsWith("u-free") && !messages.some(previous => previous.id === m.id));
+            if (emitted && !updated.pendingPath) router.replace(`/ask?topic=mood&message=${encodeURIComponent(emitted.id)}`);
+          }
         }}
       >
         <input
@@ -215,9 +250,9 @@ export function AskPage() {
         </Button>
       </form>
       <div className="mt-4 flex flex-wrap gap-3" aria-live="polite">
-        {reply?.nextPath ? <Link data-testid="assistant-next" className="inline-flex min-h-11 items-center text-brand underline" href={reply.intent === "mood" ? "/brief" : reply.nextPath}>{t(reply.nextPath === "/memory" ? "nav.memory" : reply.intent === "mood" ? "checkin.organise" : reply.nextPath === "/report" ? "nav.health" : reply.nextPath === "/care" ? "nav.follow" : reply.nextAction === "check-in" ? "checkin.title" : reply.nextAction === "question" ? "local.question" : "ask.prep")}</Link> : null}
-        {reply?.intent === "mood" ? <Link data-testid="assistant-record-only" className="inline-flex min-h-11 items-center text-brand underline" href="/check-in">{t("local.record")}</Link> : null}
-        <Link className="inline-flex min-h-11 items-center text-brand underline" href="/health">{t("nav.health")}</Link>
+        {reply?.nextPath ? <Link prefetch={false} data-testid="assistant-next" className="inline-flex min-h-11 items-center text-brand underline" href={reply.intent === "mood" ? "/brief" : reply.nextPath}>{reply.intent === "mood" || reply.nextPath === "/report" ? <NavigationLabel label={t(reply.intent === "mood" ? "checkin.organise" : "report.title")} pendingText={t(reply.intent === "mood" ? "ask.openingBrief" : "ask.openingReport")} /> : t(reply.nextPath === "/help" ? "demo.urgent-help" : reply.nextPath === "/memory" ? "nav.memory" : reply.nextPath === "/care" ? "nav.follow" : reply.nextAction === "check-in" ? "checkin.title" : reply.nextAction === "question" ? "local.question" : "ask.prep")}</Link> : null}
+        {reply?.intent === "mood" ? <Link prefetch={false} data-testid="assistant-record-only" className="inline-flex min-h-11 items-center text-brand underline" href="/check-in">{t("local.record")}</Link> : null}
+        <Link prefetch={false} className="inline-flex min-h-11 items-center text-brand underline" href="/health">{t("nav.health")}</Link>
       </div>
       <p className="mt-3 text-[14px] text-ink-muted" data-testid="assistant-scope">{t("local.scope")}</p>
       <p className="mt-2 text-[14px] text-ink-muted">{t("local.helpScope")}</p>

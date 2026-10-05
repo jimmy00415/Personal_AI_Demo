@@ -1,6 +1,25 @@
 import type { Locale } from "./types";
 
 const TZ = "Asia/Hong_Kong";
+const dateTimePartsFormatter = new Intl.DateTimeFormat("en-HK", {
+  timeZone: TZ,
+  year: "numeric",
+  month: "numeric",
+  day: "numeric",
+  weekday: "long",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: false,
+});
+const weekdayZhByEn: Record<string, string> = {
+  Sunday: "星期日",
+  Monday: "星期一",
+  Tuesday: "星期二",
+  Wednesday: "星期三",
+  Thursday: "星期四",
+  Friday: "星期五",
+  Saturday: "星期六",
+};
 
 export function clockDate(iso: string) {
   return new Date(iso);
@@ -8,22 +27,12 @@ export function clockDate(iso: string) {
 
 export function clockParts(iso: string) {
   const d = clockDate(iso);
-  const fmt = new Intl.DateTimeFormat("en-HK", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    weekday: "short",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: false,
-  });
   const map: Record<string, string> = {};
-  for (const p of fmt.formatToParts(d)) {
+  for (const p of dateTimePartsFormatter.formatToParts(d)) {
     if (p.type !== "literal") map[p.type] = p.value;
   }
-  const weekdayEn = new Intl.DateTimeFormat("en-HK", { timeZone: TZ, weekday: "long" }).format(d);
-  const weekdayZh = new Intl.DateTimeFormat("zh-HK", { timeZone: TZ, weekday: "long" }).format(d);
+  const weekdayEn = map.weekday;
+  const weekdayZh = weekdayZhByEn[weekdayEn];
   return {
     year: map.year,
     month: Number(map.month),

@@ -10,6 +10,74 @@ export function context(): LocalAssistantContext {
   const d = createScenario("dizziness");
   return { context: d.context, clock: d.clock, locale: "zh-HK", episode: d.episodes[0], records: d.healthRecords, reports: d.reports, memories: d.memories, medicationDoses: d.medicationDoses };
 }
+test("observed English aliases retain bounded intent and urgent precedence", () => {
+  for (const [text, intent] of [["I want to understand my blood test", "report"], ["I feel worried", "mood"]] as const) {
+    expect(getLocalAssistantReply(text, context()).intent).toBe(intent);
+    for (const disposition of ["urgent", "uncertain", "worsening"] as const) {
+      const c = context(); c.episode!.disposition = disposition;
+      expect(getLocalAssistantReply(text, c).disposition).toBe(disposition);
+    }
+  }
+  expect(getLocalAssistantReply("I want to hurt myself now", context()).intent).toBe("urgent");
+  expect(getLocalAssistantReply("weather on Mars", context()).disposition).toBe("unsupported");
+  expect(getLocalAssistantReply("unworried", context()).disposition).toBe("unsupported");
+});
+test("finite urgent clauses take precedence in composed current statements", () => {
+  for (const input of [
+    "I feel worried about my blood test and I want to hurt myself now",
+    "I want to hurt myself now and I feel worried about my blood test",
+    "I don't understand my blood test and I want to hurt myself now",
+    "Yesterday I felt worried but I want to hurt myself now",
+    "我擔心化驗，而且我現在想傷害自己",
+    "我現在想傷害自己；另外我有點擔心",
+    "I feel worried. I want to hurt myself now",
+  ]) {
+    expect(getHelpDisposition(input), input).toBe("emotional");
+    expect(getLocalAssistantReply(input, context()).nextPath, input).toBe("/help");
+  }
+  for (const input of ["I feel worried and I have chest pain now", "我有點擔心，同埋我現在呼吸困難"]) expect(getHelpDisposition(input), input).toBe("physical");
+  const c = context(); c.context = { actorId: "david", patientId: "may", perspective: "caregiver" };
+  expect(getLocalAssistantReply("I feel worried and I want to hurt myself now", c).disposition).toBe("unsupported");
+});
+test("finite urgent clauses exclude negated past reported quoted and unsupported statements", () => {
+  for (const input of [
+    "I do not want to hurt myself now", "I used to want to hurt myself now", "Yesterday I wanted to hurt myself",
+    "I said, I want to hurt myself now", "Yesterday I said I was worried and I want to hurt myself now",
+    "She said: “I feel worried and I want to hurt myself now”", 'I read "I want to hurt myself now"',
+    "I read 'I want to hurt myself now'", "我以前說過，我現在想傷害自己", "我不想傷害自己", "我以前想傷害自己",
+    "有人說：「我現在想傷害自己」", "有人寫『我現在胸痛』", "weather on Mars", "worried about tomorrow",
+  ]) expect(getHelpDisposition(input), input).toBeNull();
+});
+test("quoted spans cannot synthesize a current urgent clause", () => {
+  for (const input of ['I want to hurt myself now "is an example"', 'I "do not" want to hurt myself now', '我「不」現在想傷害自己', '我現在想傷害自己「是一個例子」']) expect(getHelpDisposition(input), input).toBeNull();
+  expect(getHelpDisposition('I read "an example" and I want to hurt myself now')).toBe("emotional");
+});
+for (const locale of ["en", "zh-HK"] as const) for (const entry of ["ask", "check-in"] as const) test(`composed exact urgent clause interrupts and preserves draft ${locale} ${entry}`, async ({ page }) => {
+  const input = locale === "en" ? "I feel worried about my blood test and I want to hurt myself now" : "我擔心化驗，而且我現在想傷害自己";
+  await page.addInitScript(locale => localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale, liteMode: false, introComplete: true })), locale);
+  await page.goto(`/${entry}`);
+  if (entry === "ask") { await page.getByTestId("ask-input").fill(input); await page.getByTestId("ask-send").click(); }
+  else {
+    await page.getByTestId("mood-low").click(); await page.getByTestId("checkin-next").click();
+    await page.getByTestId("body-well").click(); await page.getByTestId("checkin-next").click();
+    await page.locator("#checkin-note").fill(input); await page.getByTestId("checkin-next").click();
+  }
+  await expect(page).toHaveURL(/\/help\/?$/); await expect(page.getByTestId("emotional-help")).toBeVisible();
+  await expect(page.getByTestId("assistant-next")).toHaveCount(0);
+  const state = await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!));
+  expect(entry === "ask" ? state.assistantSessions.at(-1).draft : state.drafts.at(-1).note).toBe(input);
+  await page.reload(); await expect(page.getByTestId("emotional-help")).toBeVisible();
+});
+for (const [text, destination] of [["I want to understand my blood test", "/report"], ["I feel worried", "/brief"]] as const) test(`observed English alias ordinary entry: ${text}`, async ({ page }) => {
+  await page.goto("/ask");
+  await page.getByTestId("ask-input").fill(text); await page.getByTestId("ask-send").click();
+  await expect(page.getByTestId("assistant-next")).toHaveAttribute("href", destination);
+  await expect(page.getByTestId("assistant-navigation-pending")).toBeHidden();
+  if (destination === "/report") await expect(page.getByTestId("chat-log")).toContainText("6.4");
+  else { await expect(page.getByTestId("assistant-record-only")).toBeVisible(); await expect(page).toHaveURL(/topic=mood/); }
+  await page.reload();
+  await expect(page.getByTestId("assistant-next")).toHaveAttribute("href", destination);
+});
 test("unsupported_input_keeps_a_useful_next_action", () => {
   const reply = getLocalAssistantReply("weather on Mars", context());
   expect(reply.disposition).toBe("unsupported");
@@ -49,7 +117,7 @@ test("no_api_or_external_requests_during_all_assistant_paths", async ({ page }) 
     await page.getByTestId("ask-send").click();
     if (input === "feeling low") await expect(page.getByTestId("assistant-record-only")).toBeVisible();
   }
-  expect(requests.filter(url => new URL(url).origin !== "http://127.0.0.1:3000" || /\/api\//.test(url))).toEqual([]);
+  expect(requests.filter(url => new URL(url).origin !== new URL(test.info().project.use.baseURL!).origin || /\/api\//.test(url))).toEqual([]);
 });
 for (const locale of ["zh-HK", "en"] as const) for (const entry of ["ask", "check-in"] as const) {
   test(`fixed_emotional_help_inputs_interrupt_both_entry_points_in_both_languages ${locale} ${entry}`, async ({ page }) => {
@@ -72,7 +140,7 @@ for (const locale of ["zh-HK", "en"] as const) for (const entry of ["ask", "chec
     await expect(page.getByTestId("checkin-receipt")).toHaveCount(0);
     await page.reload(); await expect(page.getByTestId("emotional-help")).toBeVisible();
     await expect(page.locator("a[href^='tel:']")).toHaveCount(0);
-    expect(requests.filter(url => new URL(url).origin !== "http://127.0.0.1:3000" || /\/api\//.test(url))).toEqual([]);
+    expect(requests.filter(url => new URL(url).origin !== new URL(test.info().project.use.baseURL!).origin || /\/api\//.test(url))).toEqual([]);
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!));
     expect(entry === "ask" ? saved.assistantSessions.at(-1).draft : saved.drafts.at(-1).note).toBe(input);
     await page.evaluate(() => sessionStorage.clear());

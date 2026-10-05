@@ -91,6 +91,10 @@ export function applyLegacyPatch(demo: DemoState, patch: Partial<AppState>): Dem
       const prior = demo.healthRecords.find(old => old.id === r.id);
       return revised(prior, { ...prior, id: r.id, patientId: "may", category: prior?.category ?? (r.kind === "symptom" ? "body" : r.kind === "report" || r.kind === "measurement" ? "measurements" : r.kind === "medication" ? "medication" : "private"), source: r.provenance.source, occurredAt: r.occurredAt, enteredAt: r.enteredAt, title: r.title, text: r.summary, kind: r.kind, revision: prior?.revision ?? 1 });
     });
+    // Link newly organised symptom rows without replacing the original evidence.
+    const added = next.healthRecords.filter(r => r.source === "organised" && r.kind === "symptom" && !demo.healthRecords.some(old => old.id === r.id));
+    const episode = currentEpisode(next);
+    if (episode?.saved && added.length) next.episodes = next.episodes.map(e => e.id === episode.id ? { ...e, sourceRecordIds: [...new Set([...e.sourceRecordIds, ...added.map(r => r.id)])], revision: e.revision + 1 } : e);
     // A legacy summary replaced the original row. Retain the source as evidence.
     const referenced = new Set([...next.episodes, ...next.tasks, ...next.events, ...next.memories, ...next.briefs].flatMap(e => e.sourceRecordIds));
     next.healthRecords.push(...demo.healthRecords.filter(r => referenced.has(r.id) && !next.healthRecords.some(n => n.id === r.id)));

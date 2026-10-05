@@ -9,6 +9,7 @@ import { formatDateTime, formatIcsUtc } from "@/lib/clock";
 import { selectBpAverage } from "@/lib/demo/selectors";
 import { Button } from "@/components/system";
 import { BookingReview } from "./BookingReview";
+import { currentOrganisedRecord } from "@/lib/demo/episode-facts";
 
 export function BookPage() {
   const { t, locale, L } = useI18n();
@@ -23,6 +24,7 @@ export function BookPage() {
   const selected = stage === "review" ? clinicSlots.find(s => s.id === selectedId) : slots.find(s => s.id === selectedId) ?? slots[0];
   const receipt = appointment?.status === "scheduled" && appointment.bookingStatus !== "none" && !changing;
   const average = selectBpAverage(demo);
+  const allergy = demo.memories.find(m => m.id === "mem-pen" && m.patientId === demo.context.patientId);
 
   function confirm() {
     if (!appointment || !selected) return;
@@ -47,9 +49,10 @@ export function BookPage() {
     <p className="text-[14px] text-ink-soft">{t("book.sub")}</p><h1 className="mt-2 text-[30px]">{t("book.title")}</h1><p className="mt-3 text-ink-muted">{t("book.lead")}</p>
     <section className="mt-6" data-testid="book-packet"><h2 className="text-[20px]">{t("book.packet")}</h2><p className="mt-2">{t("book.identity")}</p>
       <p className="mt-2">{t("book.original")}: <time dateTime={appointment.scheduledAt}>{formatDateTime(appointment.scheduledAt, locale)}</time></p>
-      {demo.healthRecords.filter(r => r.patientId === "may" && r.category === "body" && !r.supersededByRecordId).map(r => <p className="mt-2" key={r.id}>{L(r.text)}</p>)}
+      {demo.healthRecords.filter(r => r.patientId === "may" && r.category === "body" && !r.supersededByRecordId).map(r => <p className="mt-2" key={r.id}>{L(currentOrganisedRecord(demo, r).text)}</p>)}
       {average ? <p className="mt-2">{t("ask.f.avg")}: {average.systolic}/{average.diastolic} mmHg</p> : null}
-      <p className="mt-2">{michelleMeds.map(m => `${m.name} ${L(m.dose)}`).join(" · ")} · Penicillin · {t("source.user")}</p>
+      <p className="mt-2">{michelleMeds.map(m => `${m.name} ${L(m.dose)}`).join(" · ")}</p>
+      <p className="mt-2">{allergy ? <>{L(allergy.value)} · {t(allergy.source === "home-measure" ? "source.home" : `source.${allergy.source}`)} · {formatDateTime(allergy.enteredAt, locale)}</> : t("book.allergyUnknown")}</p>
       {demo.reports.filter(r => r.patientId === "may").map(r => <p className="mt-2" key={r.id}>{r.results.map(x => `${L(x.name)} ${x.value} ${x.unit}`).join(" · ")}</p>)}
       {demo.questions.some(q => q.patientId === demo.context.patientId && q.selected) ? <div className="mt-4"><h3>{t("brief.s6")}</h3><ul className="mt-2 space-y-2">{demo.questions.filter(q => q.patientId === demo.context.patientId && q.selected).map(q => <li key={q.id}>{L(q.text)}</li>)}</ul></div> : null}
     </section>
@@ -65,7 +68,7 @@ export function BookPage() {
           {changing ? <Button className="mt-3" variant="secondary" data-testid="book-keep-existing" onClick={() => { setChanging(false); setError(false); }}>{t("book.keep")}</Button> : null}
         </section>}
         {appointment.status === "scheduled" ? <Button className="mt-5" variant="secondary" data-testid="book-cancel" onClick={() => setStage("cancel")}>{t("book.cancel")}</Button> : null}
-        <Link href="/care" className="mt-5 flex min-h-11 items-center text-brand">{t("nav.follow")}</Link>
+        <Link href="/care" onClick={event => { if (receipt && event.detail > 1) event.preventDefault(); }} className="mt-5 flex min-h-11 items-center text-brand">{t("nav.follow")}</Link>
       </>}
     <p className="mt-8 text-[14px] text-ink-soft">{t("book.note")}</p>
   </div>;

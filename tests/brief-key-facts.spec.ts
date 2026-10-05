@@ -32,7 +32,7 @@ for (const locale of ['zh-HK','en'] as const) for (const recipient of [false,tru
     await expect(facts).toContainText(formatDateTime(state.medicationDoses.find(d=>d.id==='dose-ator-14')!.scheduledAt,locale));
     if (recipient) { await expect(facts).not.toContainText('PRIVATE_NOTE'); await expect(facts).not.toContainText('Penicillin'); }
     await page.setViewportSize({width:390,height:844});
-    await facts.screenshot({path:`.superpowers/sdd/2026-10-03-caremate-complete-demo/task-9-fix1-${locale}-${recipient?'recipient':'personal'}-keyfacts.png`});
+    await facts.screenshot({path: test.info().outputPath(`task-9-fix1-${locale}-${recipient?'recipient':'personal'}-keyfacts.png`)});
   });
   test(`key_facts_show_latest_body_checkin_and_label_retained_history_${locale}_${recipient?'recipient':'personal'}`, async ({page}) => {
     const state=fixture(recipient); await start(page,state,locale,recipient);

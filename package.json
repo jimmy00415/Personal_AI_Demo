@@ -6,9 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --ignore-pattern \"docs/superpowers/evidence/**\"",
     "test": "playwright test",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:perf": "node scripts/measure-demo-performance.mjs",
+    "test:prod": "node scripts/verify-static-demo.mjs prod",
+    "test:static": "node scripts/verify-static-demo.mjs static",
+    "test:a11y": "node scripts/verify-static-demo.mjs a11y",
+    "build:static": "node scripts/build-static-demo.mjs"
   },
   "dependencies": {
     "@fontsource/noto-sans-tc": "^5.3.0",
@@ -24,6 +29,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
@@ -31,6 +37,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
+    "lighthouse": "13.5.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

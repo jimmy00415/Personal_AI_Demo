@@ -235,7 +235,7 @@ export function openingClock() {
   return OPENING_CLOCK;
 }
 
-/** Exact, punctuation/case-normalised examples only, not a general clinical detector. */
+/** Exact utterances or bounded unquoted current clauses; not a general clinical detector. */
 export const helpInputs = {
   emotional: ["我現在想傷害自己", "我而家想傷害自己", "我現在想自殺", "I want to hurt myself now", "I want to kill myself now"],
   physical: ["我現在胸痛", "我而家胸痛", "我現在呼吸困難", "I have chest pain now", "I cannot breathe now"],

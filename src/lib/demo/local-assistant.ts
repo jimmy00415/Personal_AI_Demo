@@ -3,9 +3,30 @@ import { helpInputs, emptyAnswers } from "./fixtures";
 import type { DemoState, HealthEpisode, LocalAssistantContext, LocalAssistantReply, Localized } from "./types";
 
 const normalise = (text: string) => text.trim().toLowerCase().replace(/[。.!！?？]+$/, "").replace(/\s+/g, " ");
+/** Finite demo grammar only: quoted and explicitly reported prose is excluded. */
+function currentUnquotedClauses(input: string): string[] {
+  const pairs: Record<string, string> = { '"': '"', "'": "'", "“": "”", "‘": "’", "「": "」", "『": "』" };
+  const letter = (char = "") => /[\p{L}\p{N}]/u.test(char);
+  let unquoted = "";
+  for (let i = 0; i < input.length; i++) {
+    const opening = input[i], closing = pairs[opening];
+    if (!closing || opening === "'" && letter(input[i - 1]) && letter(input[i + 1])) { unquoted += opening; continue; }
+    let end = input.indexOf(closing, i + 1);
+    while (end >= 0 && closing === "'" && letter(input[end - 1]) && letter(input[end + 1])) end = input.indexOf(closing, end + 1);
+    if (end < 0) return []; // Unpaired quotation is outside this bounded grammar.
+    // Keep a nonmatching token so removal cannot join words into an urgent clause.
+    unquoted += " \uFFFC "; i = end;
+  }
+  // Deliberately conservative for reported composites. This can miss mixed
+  // reported/current prose; it is not general clinical language recognition.
+  if (/\b(?:said|says|told|quoted|wrote)\b|說過|話過|講過|寫過|有人說|他說|她說|佢話|引用/i.test(unquoted)) return [];
+  return unquoted.split(/\b(?:and|but|also)\b|而且|另外|同埋|[;；\r\n。.!！?？]+/i).map(clause => clause.replace(/^[\s,，]+|[\s,，]+$/g, ""));
+}
 export function getHelpDisposition(input: string): "physical" | "emotional" | null {
   const text = normalise(input);
   for (const kind of ["emotional", "physical"] as const) if (helpInputs[kind].some(example => normalise(example) === text)) return kind;
+  const clauses = currentUnquotedClauses(input).map(normalise);
+  for (const kind of ["emotional", "physical"] as const) if (helpInputs[kind].some(example => clauses.includes(normalise(example)))) return kind;
   return null;
 }
 /** A bounded local discovery question, not a catch-all for medication or symptom prose. */
@@ -32,12 +53,12 @@ export function getLocalAssistantReply(input: string, context: LocalAssistantCon
   if (disposition === "uncertain" || disposition === "worsening") return reply("symptom", messages[disposition === "uncertain" ? "ask.uncertainHelp" : "ask.worseAdvice"], "brief", disposition, "/brief");
   const text = input.trim();
   if (isMemoryQuestion(text)) return reply("question", getMemoryExplanation(context), "question", "continue", "/memory");
-  if (/低落|壓力|難過|feeling low|stressed|sad/i.test(text)) return reply("mood", messages["local.mood"], "check-in", "continue", "/check-in");
+  if (/低落|壓力|難過|feeling low|stressed|sad|\bworried\b/i.test(text)) return reply("mood", messages["local.mood"], "check-in", "continue", "/check-in");
   if (/服藥|食藥|medicine|medication|dose/i.test(text)) {
     const dose = (context.episode?.answers.medGap || /14/.test(text) ? context.medicationDoses?.find(d => d.patientId === context.context.patientId && d.id === "dose-ator-14") : undefined) ?? context.medicationDoses?.filter(d => d.patientId === context.context.patientId && Date.parse(d.scheduledAt) <= Date.parse(context.clock)).at(-1);
     return reply("question", messages[!dose ? "local.noRecord" : dose.status === "unknown" ? "local.medUnknown" : dose.status === "user_reported_not_taken" ? "local.medNotTaken" : "local.medTaken"], "question", "continue", "/care");
   }
-  if (/報告|report|HbA1c|化驗/i.test(text)) {
+  if (/報告|report|HbA1c|化驗|\bblood test\b/i.test(text)) {
     const report = context.reports.filter(r => r.patientId === context.context.patientId).at(-1);
     const result = report?.results[0];
     return reply("report", result ? { zh: `${result.name.zh}：${result.value} ${result.unit}。${messages["local.report"].zh}`, en: `${result.name.en}: ${result.value} ${result.unit}. ${messages["local.report"].en}` } : messages["local.noRecord"], "brief", "continue", report ? "/report" : "/brief");

@@ -44,6 +44,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [hydrate]);
 
   useEffect(() => {
+    if (hydrated) void import("./LocalFontStyles").catch(() => undefined);
+  }, [hydrated]);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "d") router.push("/dev");
     };
@@ -68,7 +72,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { isActive, hideChrome, hideFab, showAskLink, bare } = shellLayout(pathname, emergency);
 
   if (!hydrated) {
-    return <main className="min-h-dvh bg-background p-6"><h1 className="title-1">{t("product.name")}</h1><p role="status">{t("welcome.loading")}</p></main>;
+    return <main className="min-h-dvh bg-background p-6" style={{ fontFamily: "system-ui, sans-serif" }}><h1 className="title-1">{t("product.name")}</h1><p role="status">{t("welcome.loading")}</p></main>;
   }
 
   const storageNotice = persistenceError ? <p role="alert" data-testid="persistence-error" className="relative z-50 bg-amber-50 p-4 text-ink">{t("storage.error")}</p> : null;
@@ -83,7 +87,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="min-h-dvh bg-background">
         <ToastHost />
         {storageNotice}
-        <div className={bare ? "" : "mx-auto max-w-2xl px-6 py-10"}>{content}</div>
+        {bare ? <div className="">{content}</div> : <main className="mx-auto max-w-2xl px-6 py-10">{content}</main>}
       </div>
     );
   }
@@ -93,7 +97,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <ToastHost />
       {storageNotice}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[120px] flex-col border-r border-line/80 bg-background px-2 py-5 md:flex lg:w-[220px] lg:px-3">
-        <Link href="/" className="mb-8 flex items-center gap-2.5 px-2">
+        <Link prefetch={false} href="/" className="mb-8 flex items-center gap-2.5 px-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-brand text-[15px] text-white">康</span>
           <span className="hidden lg:block text-[15px]">{t("product.name")}</span>
         </Link>
@@ -101,7 +105,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {primary.map((item) => {
             const Icon = item.icon;
             return (
-              <Link
+              <Link prefetch={false}
                 key={item.href}
                 href={item.href}
                 data-testid={item.testId}
@@ -116,7 +120,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {!showAskLink ? null : (
             <>
               <div className="my-3 mx-2 h-px bg-line" />
-              <Link
+              <Link prefetch={false}
                 href="/ask"
                 data-testid="nav-ask" aria-label={t("nav.ask")}
                 className="nav-item flex min-h-11 flex-col items-center gap-1 rounded-[12px] px-2 py-2 text-[13px] lg:flex-row lg:gap-3 lg:px-3 lg:text-[15px] text-ink-muted hover:bg-surface"
@@ -135,7 +139,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {menuOpen ? (
             <div className="absolute bottom-14 left-0 right-0 z-40 rounded-[14px] bg-surface p-2 shadow-[0_8px_28px_rgba(23,26,24,0.08)]" data-testid="profile-menu">
               {secondary.map((item) => (
-                <Link
+                <Link prefetch={false}
                   key={item.href}
                   href={item.href}
                   data-testid={item.testId}
@@ -165,9 +169,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <header className="sticky top-0 z-20 flex items-center justify-between gap-2 bg-background px-5 py-3 md:hidden">
-        <Link href="/" className="flex min-h-11 min-w-11 shrink-0 items-center whitespace-nowrap text-[16px]">{t("product.name")}</Link>
-        <div className="flex min-w-0 items-center gap-2">{!hideFab ? <Link href="/ask" data-testid="fab-ask" className="flex min-h-11 items-center rounded-full bg-brand px-3 text-white">{t("nav.ask")}</Link> : null}
-        <Link href="/settings" aria-label={t("nav.settings")} className="flex min-h-11 min-w-11 items-center justify-center rounded-full p-2">
+        <Link prefetch={false} href="/" className="flex min-h-11 min-w-11 shrink-0 items-center whitespace-nowrap text-[16px]">{t("product.name")}</Link>
+        <div className="flex min-w-0 items-center gap-2">{!hideFab ? <Link prefetch={false} href="/ask" data-testid="fab-ask" className="flex min-h-11 items-center rounded-full bg-brand px-3 text-white">{t("nav.ask")}</Link> : null}
+        <Link prefetch={false} href="/settings" aria-label={t("nav.settings")} className="flex min-h-11 min-w-11 items-center justify-center rounded-full p-2">
           <Settings className="h-5 w-5" />
         </Link></div>
       </header>
@@ -182,7 +186,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {primary.map((item) => {
             const Icon = item.icon;
             return (
-              <Link key={item.href} href={item.href} data-testid={`${item.testId}-mobile`} className={cn("nav-item flex min-h-11 flex-col items-center gap-1 rounded-[12px] py-2 text-[11px]", isActive(item.href) ? "text-brand-deep" : "text-ink-soft")}>
+              <Link prefetch={false} key={item.href} href={item.href} data-testid={`${item.testId}-mobile`} className={cn("nav-item flex min-h-11 flex-col items-center gap-1 rounded-[12px] py-2 text-[11px]", isActive(item.href) ? "text-brand-deep" : "text-ink-soft")}>
                 <Icon className="h-5 w-5" />
                 {t(actorId === "david" && item.href === "/health" ? "sharing.shared" : actorId === "david" && item.href === "/care" ? "sharing.tasks" : item.key)}
               </Link>

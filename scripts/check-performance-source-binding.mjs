@@ -1,0 +1,31 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {captureSourceBinding,verifySourceBinding,methodFiles,buildFiles,sha256} from './performance-source-binding.mjs';
+import {verifyAcceptedIndex,createAcceptedIndex} from './verify-accepted-performance.mjs';
+
+const root=process.cwd(),fixtures=await fs.mkdtemp(path.join(root,'docs/superpowers/evidence/2026-10-04/task-10/source-binding-fixtures-'));
+await fs.mkdir(path.join(fixtures,'src'));await fs.mkdir(path.join(fixtures,'public'));await fs.mkdir(path.join(fixtures,'scripts'));
+await fs.writeFile(path.join(fixtures,'src','page.tsx'),'export const text = "same content";\r\n');await fs.writeFile(path.join(fixtures,'public','image.bin'),Buffer.from([0,13,10,255]));
+await fs.writeFile(path.join(fixtures,'package-lock.json'),'{"lockfileVersion":3}\r\n');await fs.writeFile(path.join(fixtures,'next.config.ts'),'export default {};\r\n');
+for(const file of [...methodFiles,...buildFiles]){await fs.mkdir(path.dirname(path.join(fixtures,file)),{recursive:true});await fs.writeFile(path.join(fixtures,file),'export const fixture = true;\r\n');}
+const binding=await captureSourceBinding(fixtures),results=[];
+const check=async(name,fn)=>{await fn();results.push({name,passed:true});console.log(`PASS ${name}`);};
+await check('exact current inventory verifies',async()=>assert.equal((await verifySourceBinding(fixtures,binding)).matchedFiles,binding.files.length));
+await check('CRLF versus LF only is portable',async()=>{await fs.writeFile(path.join(fixtures,'src/page.tsx'),'export const text = "same content";\n');await verifySourceBinding(fixtures,binding);});
+await check('non-EOL source change rejects',async()=>{const file=path.join(fixtures,'src/page.tsx'),prior=await fs.readFile(file);await fs.writeFile(file,'export const text = "changed";\n');await assert.rejects(verifySourceBinding(fixtures,binding),/stale/);await fs.writeFile(file,prior);});
+await check('binary CRLF bytes are not normalized',async()=>{const file=path.join(fixtures,'public/image.bin'),prior=await fs.readFile(file);await fs.writeFile(file,Buffer.from([0,10,255]));await assert.rejects(verifySourceBinding(fixtures,binding),/stale/);await fs.writeFile(file,prior);});
+await check('missing runtime input rejects',async()=>{const file=path.join(fixtures,'src/page.tsx'),moved=path.join(fixtures,'page.fixture');await fs.rename(file,moved);await assert.rejects(verifySourceBinding(fixtures,binding),/stale/);await fs.rename(moved,file);});
+await check('extra runtime input rejects',async()=>{const file=path.join(fixtures,'public/extra.txt'),moved=path.join(fixtures,'extra.fixture');await fs.writeFile(file,'extra');await assert.rejects(verifySourceBinding(fixtures,binding),/stale/);await fs.rename(file,moved);});
+await check('new runtime config rejects',async()=>{const file=path.join(fixtures,'postcss.config.json'),moved=path.join(fixtures,'postcss.fixture');await fs.writeFile(file,'{}');await assert.rejects(verifySourceBinding(fixtures,binding),/stale/);await fs.rename(file,moved);});
+await check('changed lockfile rejects',async()=>{const file=path.join(fixtures,'package-lock.json'),prior=await fs.readFile(file);await fs.writeFile(file,'{"lockfileVersion":3,"changed":true}');await assert.rejects(verifySourceBinding(fixtures,binding),/stale/);await fs.writeFile(file,prior);});
+await check('changed captured method rejects',async()=>{const file=path.join(fixtures,methodFiles[0]),prior=await fs.readFile(file);await fs.writeFile(file,'export const fixture = false;\n');await assert.rejects(verifySourceBinding(fixtures,binding),/stale/);await fs.writeFile(file,prior);});
+for(const name of buildFiles)await check(`changed build/deployment input rejects: ${name}`,async()=>{const file=path.join(fixtures,name),prior=await fs.readFile(file);await fs.writeFile(file,'changed artifact-producing input\n');await assert.rejects(verifySourceBinding(fixtures,binding),/stale/);await fs.writeFile(file,prior);});
+await check('missing accepted index rejects',async()=>assert.rejects(verifyAcceptedIndex(fixtures),/ENOENT/));
+const incomplete=Buffer.from(JSON.stringify({exitCode:0,actions:[],actionGroups:[],navigationSampleCount:0,navigationGroups:[]}));await fs.writeFile(path.join(fixtures,'incomplete-verification.json'),incomplete);
+await fs.writeFile(path.join(fixtures,'incomplete-index.json'),JSON.stringify({schemaVersion:1,scope:'140-reviewed-actions-and-340-navigations',run:'nonexistent-run',acceptedVerification:'incomplete-verification.json',acceptedVerificationSha256:sha256(incomplete)}));
+await check('incomplete indexed proof rejects',async()=>assert.rejects(verifyAcceptedIndex(fixtures,'incomplete-index.json'),/incomplete/));
+await check('tampered indexed result rejects',async()=>{await fs.writeFile(path.join(fixtures,'incomplete-verification.json'),Buffer.concat([incomplete,Buffer.from(' ')]));await assert.rejects(verifyAcceptedIndex(fixtures,'incomplete-index.json'),/hash mismatch/);});
+await check('old reviewed smoke cannot create full accepted index',async()=>assert.rejects(createAcceptedIndex(root,'docs/superpowers/evidence/2026-10-04/task-10/performance-smoke-1791051893513','docs/superpowers/evidence/2026-10-04/task-10/forbidden-smoke-index.json'),/ENOENT|scope|binding|incomplete/));
+await fs.writeFile(path.join(fixtures,'source-binding.json'),JSON.stringify(binding,null,2));
+console.log(JSON.stringify({passed:results.length,results,fixtures,scope:'Offline constructed source-binding/index-negative fixtures only; no accepted index or performance capture produced'},null,2));

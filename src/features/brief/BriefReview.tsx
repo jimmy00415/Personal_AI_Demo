@@ -15,6 +15,21 @@ import type { BriefPacket, RecipientId } from "@/lib/demo/types";
 export function BriefReview({ recipientId }: { recipientId?: RecipientId }) {
   return <Suspense fallback={null}><CurrentBriefReview recipientId={recipientId} /></Suspense>;
 }
+function partitionMedicationSummary(text: string, marker: string) {
+  if (!marker || /[\n\r\u0085\u2028\u2029]/.test(marker) || /[\r\u0085\u2028\u2029]/.test(text)) return null;
+  const lines = text.split("\n");
+  const matches = lines.flatMap((line, index) => line === marker ? [index] : []);
+  if (matches.length !== 1 || matches[0] === 0 || matches[0] === lines.length - 1) return null;
+  const prefix = lines.slice(0, matches[0]).join("\n");
+  const history = lines.slice(matches[0] + 1).join("\n");
+  if (!prefix.trim() || !history.trim() || `${prefix}\n${marker}\n${history}` !== text) return null;
+  return { prefix, marker, history };
+}
+function MedicationSummary({ text, marker }: { text: string; marker: string }) {
+  const parts = partitionMedicationSummary(text, marker);
+  if (!parts) return text;
+  return <><span data-testid="brief-medication-counts">{parts.prefix}</span>{"\n"}<details data-testid="brief-medication-history"><summary data-testid="brief-medication-history-toggle" className="min-h-12 cursor-pointer py-3 whitespace-normal break-normal [overflow-wrap:normal]">{parts.marker}</summary>{"\n"}<p data-testid="brief-medication-history-text" className="mt-2 whitespace-pre-line">{parts.history}</p></details></>;
+}
 function CurrentBriefReview({ recipientId }: { recipientId?: RecipientId }) {
   const { t } = useI18n();
   const router = useRouter();
@@ -24,14 +39,15 @@ function CurrentBriefReview({ recipientId }: { recipientId?: RecipientId }) {
   const hydrated = useAppStore(s => s.hydrated);
   const appointment = demo.appointments.find(a => a.patientId === demo.context.patientId && a.status === "scheduled");
   const appointmentId = appointment?.id;
-  useEffect(() => {
-    if (hydrated && appointmentId) useAppStore.getState().openBriefDraft(appointmentId, recipient);
-  }, [hydrated, appointmentId, recipient]);
   const prior = demo.briefs.filter(b => b.appointmentId === appointmentId && b.recipientId === (recipient ?? "may")).at(-1);
   const result = appointmentId ? buildBrief(demo, demo.context.patientId, { appointmentId, recipientId: recipient, includeMood: prior?.includeMood ?? true }) : null;
+  const needsAuthorizedDraft = hydrated && !prior && result?.ok === true;
+  useEffect(() => {
+    if (needsAuthorizedDraft && appointmentId) useAppStore.getState().openBriefDraft(appointmentId, recipient);
+  }, [needsAuthorizedDraft, appointmentId, recipient]);
   return <section className="mt-6 space-y-5">
     {!recipientId ? <label className="block">{t("packet.recipient")}<select data-testid="brief-recipient" className="mt-2 block min-h-11 w-full rounded-xl border border-line bg-surface p-3" value={recipient ?? "may"} onChange={event => router.replace(event.target.value === "may" ? "/brief" : `/brief?recipient=${event.target.value}`)}><option value="may">{t("packet.personal")}</option>{recipients.map(id => <option key={id} value={id}>{t(`sharing.${id}`)}</option>)}</select></label> : null}
-    {!appointment ? <p data-testid="brief-appointment-unavailable">{t("book.noScheduled")} <Link className="inline-flex min-h-11 items-center text-brand" href="/book">{t("book.title")}</Link></p> : result?.ok && prior ? <PacketReview key={`${result.value.id}`} packet={result.value} /> : <p data-testid="brief-unavailable">{t("packet.unavailable")}</p>}
+    {!appointment ? <p data-testid="brief-appointment-unavailable">{t("book.noScheduled")} <Link className="inline-flex min-h-11 items-center text-brand" href="/book">{t("book.title")}</Link></p> : result?.ok ? prior ? <PacketReview key={`${result.value.id}`} packet={result.value} /> : <p data-testid="brief-preparing" role="status">{t("packet.preparing")}</p> : <p data-testid="brief-unavailable">{t("packet.unavailable")}</p>}
   </section>;
 }
 function PacketReview({ packet }: { packet: BriefPacket }) {
@@ -46,7 +62,7 @@ function PacketReview({ packet }: { packet: BriefPacket }) {
   const manual = useRef<HTMLTextAreaElement>(null);
   const personal = packet.recipientId === "may";
   const dirty = supplement !== L(packet.sectionEdits?.review ?? { zh: "", en: "" });
-  const currentExport = prepareBriefExport(demo, packet.id);
+  const currentExport = fallback ? prepareBriefExport(demo, packet.id) : null;
   const patch = (includeMood = packet.includeMood) => useAppStore.getState().updateBriefDraft(packet.id, { sectionEdits: { ...packet.sectionEdits, review: { zh: supplement, en: supplement } }, questionIds: demo.questions.filter(q => q.patientId === packet.patientId && q.selected).map(q => q.id), includeMood });
   async function copy() {
     const result = useAppStore.getState().prepareBriefExport(packet.id);
@@ -65,7 +81,6 @@ function PacketReview({ packet }: { packet: BriefPacket }) {
     router.push(`/print?brief=${encodeURIComponent(result.value.id)}`);
   }
   return <>
-    <section data-testid="brief-key-facts" className="rounded-xl bg-brand-soft p-4"><h2 className="headline">{t("packet.keyFacts")}</h2><dl className="mt-3 space-y-3">{packet.sections.filter(s => ["body", "average", "medication", "allergy", "appointment"].includes(s.id) || s.id === "sharing" && s.summary).map(s => <div key={s.id}><dt className="font-medium">{L(s.title)}</dt><dd className="mt-1 whitespace-pre-line text-ink-muted">{L(s.summary ?? s.text)}</dd></div>)}</dl></section>
     <div className="rounded-xl border border-line bg-surface p-4">
       <p data-testid="brief-status" role="status">{t(packet.status === "confirmed" ? "packet.confirmed" : "packet.draft")}</p>
       <p>{t("packet.revision")} {packet.revision} · {t("packet.updated")} {formatDateTime(packet.generatedAt, locale)}</p>
@@ -73,11 +88,15 @@ function PacketReview({ packet }: { packet: BriefPacket }) {
       {packet.status === "draft" ? <p>{t("packet.reviewRequired")}</p> : null}
       <div className="mt-4 flex flex-wrap gap-3"><Button data-testid="brief-confirm" disabled={dirty} onClick={() => { const result = useAppStore.getState().confirmBrief(packet.id, packet.contentFingerprint!); if (!result.ok) setReceipt({ fingerprint: packet.contentFingerprint!, kind: "review" }); }}>{t("packet.confirm")}</Button><Button data-testid="visit-copy" variant="secondary" disabled={packet.status !== "confirmed" || dirty} onClick={() => void copy()}>{t("brief.copy")}</Button><Button data-testid="visit-print" variant="secondary" disabled={packet.status !== "confirmed" || dirty} onClick={print}>{t("packet.preview")}</Button></div>
     </div>
+    <section data-testid="brief-key-facts" className="rounded-xl bg-brand-soft p-4"><h2 className="headline">{t("packet.keyFacts")}</h2><dl className="mt-3 space-y-3">{packet.sections.filter(s => ["body", "average", "medication", "allergy", "appointment"].includes(s.id) || s.id === "sharing" && s.summary).map(s => <div key={s.id}><dt className="font-medium">{L(s.title)}</dt><dd className="mt-1 whitespace-pre-line text-ink-muted">{s.id === "medication" && s.summary ? <MedicationSummary text={L(s.summary)} marker={t("packet.doseRecent")} /> : L(s.summary ?? s.text)}</dd></div>)}</dl></section>
+    <details data-testid="brief-details">
+      <summary data-testid="brief-details-toggle" className="min-h-12 cursor-pointer py-3 text-[18px]">{t("packet.details")}</summary>
     <article data-testid="brief-packet" className="space-y-6">
       <h2 className="text-2xl">{t("packet.title")}</h2>
       {packet.sections.map(section => section.id === "readings" ? <details key={section.id}><summary data-testid="brief-readings" className="min-h-11 cursor-pointer py-3">{L(section.title)}</summary><p className="whitespace-pre-wrap">{L(section.text)}</p></details> : <section key={section.id} data-testid={section.id === "average" ? "brief-bp" : section.id === "medication" ? "brief-med-correction" : `brief-section-${section.id}`}><h3 className="font-medium">{L(section.title)}</h3><p className="mt-2 whitespace-pre-wrap">{L(section.text)}</p></section>)}
       <section data-testid="brief-questions"><h3>{t("brief.s6")}</h3><ul>{packet.questions.map(q => <li className="flex items-center justify-between gap-3" key={q.id}><span>{L(q.text)}</span>{personal ? <span className="flex flex-wrap"><Button variant="plain" data-testid={`question-edit-${q.id}`} onClick={() => { setEditingQuestion(q.id); setQuestionText(L(q.text)); }}>{t("packet.editQuestion")}</Button><Button variant="plain" onClick={() => useAppStore.getState().toggleQuestion(q.id)}>{t("brief.removeQ")}</Button></span> : null}</li>)}</ul></section>
     </article>
+    </details>
     {personal ? <>
       <Link href="/check-in" className="inline-flex min-h-11 items-center text-brand">{t("checkin.title")}</Link>
       <label className="flex min-h-11 items-center gap-3"><input type="checkbox" data-testid="brief-include-mood" checked={packet.includeMood} onChange={event => patch(event.target.checked)} />{t("packet.includeMood")}</label><p className="text-sm text-ink-muted">{t("packet.moodPolicy")}</p>
@@ -86,7 +105,7 @@ function PacketReview({ packet }: { packet: BriefPacket }) {
       <QuestionInput /><Link href="/report" data-testid="open-report" className="inline-flex min-h-11 items-center text-brand">{t("brief.openReport")}</Link>
     </> : null}
     {receipt && receipt.fingerprint === packet.contentFingerprint ? <p role="status" data-testid="brief-copy-result">{t(receipt.kind === "copied" ? "brief.copied" : receipt.kind === "failed" ? "packet.copyFailed" : "packet.reviewRequired")}</p> : null}
-    {fallback && currentExport.ok ? <div><textarea ref={manual} readOnly aria-label={t("brief.copy")} data-testid="brief-copy-fallback" value={briefToText(currentExport.value, locale)} className="min-h-64 w-full border border-line p-3" /><Button variant="secondary" onClick={() => { manual.current?.focus(); manual.current?.select(); }}>{t("packet.selectText")}</Button></div> : null}
+    {fallback && currentExport?.ok ? <div><textarea ref={manual} readOnly aria-label={t("brief.copy")} data-testid="brief-copy-fallback" value={briefToText(currentExport.value, locale)} className="min-h-64 w-full border border-line p-3" /><Button variant="secondary" onClick={() => { manual.current?.focus(); manual.current?.select(); }}>{t("packet.selectText")}</Button></div> : null}
     <p className="text-sm text-ink-muted">{t("packet.local")}</p>
   </>;
 }

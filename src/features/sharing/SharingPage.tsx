@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/system";
 import { useAppStore } from "@/lib/store";
@@ -25,6 +25,10 @@ function ConsentEditor({ recipientId }: { recipientId: RecipientId }) {
   const [review, setReview] = useState(false);
   const [revoking, setRevoking] = useState(false);
   const [receipt, setReceipt] = useState("");
+  const receiptRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (receipt) receiptRef.current?.focus();
+  }, [receipt]);
   const input = { patientId: demo.context.patientId, recipientId, level, categories };
   const previewState = setConsent(demo, input);
   const grant = demo.grants.find(g => g.patientId === demo.context.patientId && g.recipientId === recipientId);
@@ -33,11 +37,11 @@ function ConsentEditor({ recipientId }: { recipientId: RecipientId }) {
     {review && previewState.ok ? <section className="space-y-4" data-testid="sharing-review-panel"><h2>{t("sharing.preview")}</h2><SharingPreview projection={selectSharingProjection(previewState.value, demo.context.patientId, recipientId)} /><Button data-testid="sharing-confirm" onClick={() => { const result = useAppStore.getState().setConsent(input); setReceipt(t(result.ok ? "sharing.updated" : "sharing.unavailable")); setReview(false); }}>{t("sharing.confirm")}</Button><Button variant="secondary" onClick={() => setReview(false)}>{t("sharing.back")}</Button></section> : <>
       <fieldset className="space-y-2"><legend>{t("sharing.title")}</legend>{sharingLevels.map(value => <label key={value} className="flex min-h-11 cursor-pointer items-center gap-3"><input type="radio" name="sharing-level" data-testid={`level-${value}`} checked={level === value} onChange={() => { setLevel(value); setReceipt(""); }} />{t(`sharing.${value}`)}</label>)}</fieldset>
       <fieldset className="space-y-2"><legend>{t("sharing.categories")}</legend>{shareCategories.map(category => <label key={category} className="flex min-h-11 cursor-pointer items-center gap-3"><input type="checkbox" data-testid={`category-${category}`} checked={categories.includes(category)} onChange={e => { setCategories(e.target.checked ? [...categories, category] : categories.filter(c => c !== category)); setReceipt(""); }} />{t(`sharing.${category}`)}</label>)}</fieldset>
-      <p>{t("sharing.notePolicy")}</p><Button data-testid="sharing-review" disabled={!categories.length} onClick={() => setReview(true)}>{t("sharing.review")}</Button>
+      <p>{t("sharing.notePolicy")}</p><Button data-testid="sharing-review" disabled={!categories.length} onClick={() => { setReceipt(""); setReview(true); }}>{t("sharing.review")}</Button>
       <SharingPreview projection={current} interactive />
     </>}
-    {grant?.status === "active" && !revoking ? <Button variant="secondary" data-testid="sharing-revoke" onClick={() => { setRevoking(true); setReview(false); }}>{t("sharing.revoke")}</Button> : null}
+    {grant?.status === "active" && !revoking ? <Button variant="secondary" data-testid="sharing-revoke" onClick={() => { setReceipt(""); setRevoking(true); setReview(false); }}>{t("sharing.revoke")}</Button> : null}
     {revoking && grant ? <div className="space-y-3"><p>{t("sharing.revokeExplain")}</p><Button data-testid="revoke-confirm" onClick={() => { const result = useAppStore.getState().revokeConsent(grant.id); setReceipt(t(result.ok ? "sharing.updated" : "sharing.unavailable")); setRevoking(false); }}>{t("sharing.revokeConfirm")}</Button><Button variant="secondary" onClick={() => setRevoking(false)}>{t("sharing.cancel")}</Button></div> : null}
-    {receipt ? <p role="status">{receipt}</p> : null}<p className="text-sm">{t("sharing.revokeExplain")}</p>
+    {receipt ? <p role="status" ref={receiptRef} tabIndex={-1}>{receipt}</p> : null}<p className="text-sm">{t("sharing.revokeExplain")}</p>
   </div>;
 }

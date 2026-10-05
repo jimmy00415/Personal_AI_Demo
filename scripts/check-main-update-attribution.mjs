@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import {correlateAction} from './measure-demo-performance.mjs';
+import {readArchives} from './verify-performance-evidence.mjs';
+import {withConstructedCoordinateProof} from './input-coordinate-test-fixture.mjs';
+const sample=path.resolve('docs/superpowers/evidence/2026-10-04/task-10/performance-matrix-1791058301425/action-time-change-8');
+const {raw}=await readArchives(sample);
+const trace=JSON.parse(raw.get('trace.json').toString(),(_key,value,context)=>typeof value==='number'&&Number.isInteger(value)&&!Number.isSafeInteger(value)?context.source:value);
+const provenance=withConstructedCoordinateProof(JSON.parse(raw.get('dom-provenance.json')));
+const replay=(events=trace.traceEvents,p=provenance,metadata=trace.metadata)=>correlateAction(events,p,raw.get('before.jpg'),raw.get('after.jpg'),metadata);
+assert.ok(replay().candidates.find(c=>c.frameSequence===169)?.correlation,'First meaningful169 needs its own exact original MAIN ALL-to-draw proof');
+console.log('PASS diagnostic first meaningful169 chain; no new measurement or old acceptance');

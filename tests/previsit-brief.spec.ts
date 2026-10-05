@@ -39,6 +39,7 @@ test("editing_and_record_corrections_update_screen_copy_and_print", async ({ pag
   await page.getByTestId("brief-save-edit").click();
   await expect(page.getByTestId("brief-status")).toHaveText("尚未確認");
   await expect(page.getByTestId("brief-packet")).toContainText("覆診時想討論睡眠");
+  await page.getByTestId("brief-details-toggle").click();
   await page.getByTestId("brief-readings").click();
   await expect(page.getByTestId("brief-packet")).toContainText("120/80");
   await expect(page.getByTestId("brief-packet")).toContainText("未確定");
@@ -231,6 +232,7 @@ test("question text can be corrected without rewriting the imported report", asy
   const state = await snapshot(page); state.questions[0].selected = true;
   await replace(page, state);
   await page.getByTestId("brief-confirm").click();
+  await page.getByTestId("brief-details-toggle").click();
   await expect(page.getByTestId(`question-edit-${state.questions[0].id}`)).toBeVisible();
   await page.getByTestId(`question-edit-${state.questions[0].id}`).click();
   await page.getByTestId("question-text").fill("更正後的私人問題");
@@ -295,12 +297,12 @@ test("reviewed English packet remains usable at 390px and captures real preview"
   await expect(page.getByTestId("brief-section-reports")).toContainText("71");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect((await page.getByTestId("brief-confirm").boundingBox())!.height).toBeGreaterThanOrEqual(44);
-  await page.screenshot({ path: ".superpowers/sdd/2026-10-03-caremate-complete-demo/task-8-brief-390.png" });
+  await page.screenshot({ path: test.info().outputPath("task-8-brief-390.png") });
   await page.getByTestId("brief-confirm").focus(); await page.keyboard.press("Enter");
   await page.getByTestId("visit-print").click();
   await expect(page.getByTestId("print-packet")).toContainText("Confirmed");
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.screenshot({ path: ".superpowers/sdd/2026-10-03-caremate-complete-demo/task-8-print-1440.png" });
+  await page.screenshot({ path: test.info().outputPath("task-8-print-1440.png") });
 });
 
 test("contact script copy uses the confirmed current packet gate", async ({ page }) => {

@@ -12,6 +12,7 @@ import { Sparkline } from "@/components/Sparkline";
 import { useIsDesktop } from "@/components/use-is-desktop";
 import { ObservationForm } from "@/features/check-in/ObservationForm";
 import { CheckInReview } from "@/features/check-in/CheckInReview";
+import { currentOrganisedRecord } from "@/lib/demo/episode-facts";
 
 export function HealthPage() {
   const router = useRouter();
@@ -25,7 +26,7 @@ export function HealthPage() {
   const desktop = useIsDesktop();
   const readings = selectObservations(demo);
   const avg = selectBpAverage(demo);
-  const mine = demo.healthRecords.filter(r => r.patientId === demo.context.patientId);
+  const mine = demo.healthRecords.filter(r => r.patientId === demo.context.patientId).map(r => demo.context.actorId === "may" ? currentOrganisedRecord(demo, r) : r);
   const checkIns = demo.checkIns.filter(r => r.patientId === demo.context.patientId).toSorted((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
   const event = mine.find((r) => r.id === selected);
   const checkIn = checkIns.find(r => r.id === selected);
@@ -42,7 +43,7 @@ export function HealthPage() {
   return (
     <div className="mx-auto max-w-[760px]" data-testid="health-page">
       <h1 className="text-[30px] leading-tight">{t("health.title")}</h1>
-      <div className="mt-6 flex gap-1 overflow-x-auto rounded-full bg-surface-secondary p-1">
+      <div className="mt-6 grid grid-cols-1 gap-1 rounded-[24px] bg-surface-secondary p-1 min-[320px]:grid-cols-2 lg:grid-cols-4">
         {tabs.map((item) => (
           <button
             key={item.id}
@@ -50,7 +51,8 @@ export function HealthPage() {
             data-testid={`health-tab-${item.id}`}
             aria-pressed={tab === item.id}
             onClick={() => setHealthTab(item.id)}
-            className={`min-h-11 flex-1 rounded-full px-3 text-[13px] ${tab === item.id ? "bg-surface text-ink" : "text-ink-muted"}`}
+            className={`min-h-11 min-w-11 rounded-full px-3 text-[13px] ${tab === item.id ? "bg-surface text-ink" : "text-ink-muted"}`}
+            style={{ overflowWrap: "normal", wordBreak: "normal" }}
           >
             {t(item.key)}
           </button>

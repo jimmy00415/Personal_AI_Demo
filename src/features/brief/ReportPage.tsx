@@ -8,7 +8,7 @@ import { useI18n } from "@/lib/use-i18n";
 import { Button } from "@/components/system";
 
 export function ReportPage() {
-  const { t, L } = useI18n();
+  const { t, L, locale } = useI18n();
   const expanded = useAppStore((s) => s.expandedLab);
   const setExpandedLab = useAppStore((s) => s.setExpandedLab);
   const demo = useAppStore(s => s.demo);
@@ -45,11 +45,11 @@ export function ReportPage() {
         ))}
       </div>
       <p className="mt-3 text-[13px] text-ink-soft" data-testid="lab-count">
-        {report.results.length}
+        {t("report.resultCount")}{locale === "en" ? ": " : "："}{report.results.length}
       </p>
 
       <h2 className="mt-10 text-[20px]">{t("report.explain")}</h2>
-      <p className="measure mt-3 leading-relaxed">{L(report.results[0].explain)}</p>
+      <p className="measure mt-3 leading-relaxed">{report.results[0] ? L(report.results[0].explain) : t("report.emptyResults")}</p>
 
       <div className="mt-6 flex flex-wrap gap-3">
         <button type="button" className="text-[15px] text-brand" onClick={() => setSource((v) => !v)}>

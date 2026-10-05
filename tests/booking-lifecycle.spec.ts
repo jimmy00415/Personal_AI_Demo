@@ -21,11 +21,22 @@ test("booking_review_can_change_cancel_and_resume", async ({ page }) => {
   await page.getByTestId("book-review-back").click();
   await page.getByTestId("slot-slot-18-1530").click();
   await page.getByTestId("book-review-open").click();
+  const clickTargets:unknown[]=[];
+  await page.exposeFunction('recordBookingClick',(event:unknown)=>clickTargets.push(event));
+  await page.evaluate(()=>document.addEventListener('click',event=>{
+    const element=event.target as Element;
+    void (window as unknown as {recordBookingClick:(event:unknown)=>Promise<void>}).recordBookingClick({at:performance.now(),detail:event.detail,tag:element.tagName,testId:element.closest('[data-testid]')?.getAttribute('data-testid'),href:element.closest('a')?.getAttribute('href'),x:event.clientX,y:event.clientY});
+  },{capture:true}));
   await page.getByTestId("book-confirm").dblclick();
+  await test.info().attach('booking-double-click-targets',{body:JSON.stringify({clickTargets,url:page.url(),stored:await snapshot(page)}),contentType:'application/json'});
   expect((await snapshot(page)).appointments).toHaveLength(1);
+  await expect(page).toHaveURL(/\/book\/?$/);
+  await expect(page.getByTestId("book-receipt").locator("time")).toHaveAttribute("datetime", "2026-09-18T15:30:00+08:00");
+  expect((await snapshot(page)).appointments[0]).toMatchObject({id:'appt-gp',patientId:'may',scheduledAt:'2026-09-18T15:30:00+08:00',status:'scheduled',bookingStatus:'booked',revision:2});
   await page.reload();
   await expect(page.getByTestId("book-receipt").locator("time")).toHaveAttribute("datetime", "2026-09-18T15:30:00+08:00");
-  await page.goto("/care");
+  await page.getByTestId('book-page').getByRole('link',{name:'跟進',exact:true}).click();
+  await expect(page).toHaveURL(/\/care\/?$/);
   await page.getByTestId("follow-appt-row").click();
   await page.getByTestId("book-change").click();
   await page.getByTestId("slot-slot-17-1100").click();
@@ -44,6 +55,9 @@ test("booking_review_can_change_cancel_and_resume", async ({ page }) => {
   await page.goto("/book"); await page.getByTestId("slot-slot-22-1430").click();
   await page.getByTestId("book-review-open").click(); await page.getByTestId("book-confirm").click();
   expect((await snapshot(page)).appointments[0]).toMatchObject({ status: "scheduled", scheduledAt: "2026-09-22T14:30:00+08:00" });
+  const continuation=page.getByTestId('book-page').getByRole('link',{name:'跟進',exact:true});
+  for(let i=0;i<60&&!await continuation.evaluate(el=>el===document.activeElement);i++)await page.keyboard.press('Tab');
+  await expect(continuation).toBeFocused();await page.keyboard.press('Enter');await expect(page).toHaveURL(/\/care\/?$/);await expect(page.getByTestId('follow-appt-row')).toBeVisible();
 });
 test("booking_does_not_complete_contact_task_or_claim_clinic_confirmation", async ({ page }) => {
   const demo = createScenario("next-morning"); await start(page, demo);

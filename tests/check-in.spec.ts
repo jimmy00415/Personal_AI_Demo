@@ -242,5 +242,5 @@ test("keyboard_checkin_works_in_english_large_text_and_reduced_motion", async ({
   await keyboardSelect("checkin-save");
   await expect(page.getByTestId("checkin-receipt")).toContainText("Added to health records");
   expect(healthRequests).toEqual([]);
-  await page.screenshot({ path: ".superpowers/sdd/2026-10-03-caremate-complete-demo/task-2-keyboard-en.png", fullPage: true });
+  await page.screenshot({ path: test.info().outputPath("task-2-keyboard-en.png"), fullPage: true });
 });

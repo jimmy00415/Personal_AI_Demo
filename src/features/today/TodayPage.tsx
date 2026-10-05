@@ -9,6 +9,8 @@ import { formatDate, formatDateTime } from "@/lib/clock";
 import { michelleAppt, todayHero } from "@/lib/selectors";
 import { Button, GroupedList, ListRow } from "@/components/system";
 import { isTaskOverdue, selectToday, selectTodayTasks } from "@/lib/demo/selectors";
+import { hasSymptomContext } from "@/lib/demo/local-assistant";
+import { episodeBloodPressure } from "@/lib/demo/episode-facts";
 
 export function TodayPage() {
   const router = useRouter();
@@ -29,12 +31,14 @@ export function TodayPage() {
   const previsit = todayView.hero.kind === "prepare-visit" ? demo.briefs.filter(b => b.appointmentId === todayView.hero.sourceId && b.recipientId === "may").at(-1) : undefined;
   const [why, setWhy] = useState(false);
   const legacyHero = todayHero(clock, episodeSaved, answers.nextMorning, bookingStatus, phase);
+  const episode = demo.episodes.filter(e => e.patientId === demo.context.patientId).at(-1);
+  const followupTask = demo.tasks.find(task => task.id === "task-morning" && task.patientId === demo.context.patientId && task.status !== "cancelled" && task.status !== "completed");
   const emotionalHelp = demo.episodes.find(e => e.id === todayView.hero.sourceId)?.helpKind === "emotional";
   const hero = todayView.hero.kind === "urgent" ? { kind: "urgent", titleKey: emotionalHelp ? "local.emotionalTitle" : "today.heroUrgent", bodyKey: emotionalHelp ? "local.emotionalBody" : "today.heroUrgentBody" } as const
     : todayView.hero.kind === "needs-attention" ? { kind: "attention", titleKey: "today.attentionTitle", bodyKey: "today.attentionBody" } as const
       : todayView.hero.kind === "follow-up" ? { kind: "next", titleKey: "today.heroNext", bodyKey: "today.heroNextBody" } as const
         : todayView.hero.kind === "prepare-visit" ? { kind: "prepare", titleKey: "today.prepareTitle", bodyKey: "today.prepareBody" } as const
-          : demo.episodes.length ? { ...legacyHero, kind: legacyHero.kind === "next" ? "saved" : legacyHero.kind }
+          : hasSymptomContext(demo, episode) ? { ...legacyHero, kind: legacyHero.kind === "next" ? "saved" : legacyHero.kind }
             : { kind: "routine", titleKey: "today.routineTitle", bodyKey: "today.routineBody" } as const;
   const appt = michelleAppt(appointments);
   const todayTasks = selectTodayTasks(demo);
@@ -47,7 +51,7 @@ export function TodayPage() {
 
       <section data-testid="daily-brief" className="mt-8">
         <h2 className="text-[24px] leading-snug">{t(hero.titleKey)}</h2>
-        <p className="measure mt-3 text-[17px] leading-relaxed text-ink-muted">{t(hero.bodyKey)}</p>
+        <p className="measure mt-3 text-[17px] leading-relaxed text-ink-muted">{hero.kind === "open" ? <>{L(episodeBloodPressure(demo, episode))}. </> : null}{t(hero.bodyKey)}</p>
         {hero.kind === "prepare" && previsit ? <p data-testid="today-previsit-status">{t(previsit.status === "confirmed" ? "packet.confirmed" : "packet.draft")}</p> : null}
         {hero.kind === "prepare" && bookingStatus === "booked" ? <p className="mt-3 text-ink-muted">{t("today.heroBooked")}</p> : null}
 
@@ -124,8 +128,8 @@ export function TodayPage() {
         {hero.kind === "attention" ? <Link href="/care" className="mt-6 inline-flex min-h-11 items-center rounded-[10px] bg-brand px-4 py-3 text-white">{t("care.viewTask")}</Link> : null}
         {hero.kind === "prepare" ? <Link href="/brief" className="mt-6 inline-flex min-h-11 items-center rounded-[10px] bg-brand px-4 py-3 text-white">{t("today.viewBrief")}</Link> : null}
 
-        {followup === "scheduled" && hero.kind === "saved" ? (
-          <p className="mt-4 text-[15px] text-ink-muted">{t("today.heroFollow")}</p>
+        {followup === "scheduled" && hero.kind === "saved" && followupTask?.scheduledAt ? (
+          <p className="mt-4 text-[15px] text-ink-muted">{t("today.heroFollow")} <time dateTime={followupTask.scheduledAt}>{formatDateTime(followupTask.scheduledAt, locale)}</time>.</p>
         ) : null}
 
         {hero.kind === "open" ? (

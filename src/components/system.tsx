@@ -57,16 +57,18 @@ export function ListRow({
 }) {
   const inner = (
     <>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 sm:flex sm:items-center sm:gap-3">
+        <div className="min-w-0 flex-1">
         <div className="text-[16px] text-ink">{title}</div>
         {meta ? <div className="mt-0.5 text-[13px] text-ink-muted">{meta}</div> : null}
+        </div>
+        {value ? <div className="mt-1 text-[15px] text-ink-muted sm:mt-0 sm:max-w-[45%] sm:text-right">{value}</div> : null}
       </div>
-      {value ? <div className="shrink-0 text-right text-[15px] text-ink-muted">{value}</div> : null}
       {trailing}
     </>
   );
   const cls = cn(
-    "flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors",
+    "flex min-h-11 w-full items-center gap-3 px-4 py-3.5 text-left transition-colors",
     faded && "opacity-50",
     onClick && "hover:bg-surface-secondary",
   );
@@ -143,7 +145,7 @@ export function Sheet({
 }) {
   const { t } = useI18n();
   const titleId = useId();
-  const panelRef = useRef<HTMLElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
@@ -180,10 +182,10 @@ export function Sheet({
   if (!open) return null;
   return createPortal(<div ref={overlayRef} className="fixed inset-0 z-50" data-testid={testId}>
     <div aria-hidden="true" className="absolute inset-0 bg-ink/20" onClick={onClose} />
-    <aside ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={title ? titleId : undefined} className={cn("sheet-enter absolute flex max-h-[92dvh] flex-col bg-background", side === "right" ? "inset-y-0 right-0 w-full max-w-[400px] border-l border-line" : "inset-x-0 bottom-0 rounded-t-[24px] border-t border-line")}>
-      <div className="flex items-start justify-between gap-3 px-5 py-4"><div id={titleId} className="headline">{title}</div><button ref={closeRef} type="button" onClick={onClose} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full p-2 text-ink-muted" aria-label={t("common.close")}><X className="h-5 w-5" /></button></div>
+    <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={title ? titleId : undefined} className={cn("sheet-enter absolute flex max-h-[92dvh] flex-col bg-background", side === "right" ? "inset-y-0 right-0 w-full max-w-[400px] border-l border-line" : "inset-x-0 bottom-0 rounded-t-[24px] border-t border-line")}>
+      <div className="flex items-start justify-between gap-3 px-5 py-4"><h2 id={titleId} className="headline">{title}</h2><button ref={closeRef} type="button" onClick={onClose} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full p-2 text-ink-muted" aria-label={t("common.close")}><X className="h-5 w-5" /></button></div>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8">{children}</div>
-    </aside>
+    </div>
   </div>, document.body);
 }
 

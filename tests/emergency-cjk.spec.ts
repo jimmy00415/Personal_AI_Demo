@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 test.describe.configure({ timeout: 60_000 });
 
 async function clearWorld(page: import("@playwright/test").Page) {
-  await page.addInitScript(() => {
+  await page.goto('/about');
+  await page.evaluate(() => {
     localStorage.removeItem("caremate-v4");
     if (!localStorage.getItem("caremate-v4-preferences")) localStorage.setItem("caremate-v4-preferences", JSON.stringify({ locale: "zh-HK", liteMode: false, introComplete: true }));
     sessionStorage.removeItem("caremate-v4-emergency");
@@ -76,7 +77,7 @@ test("assistant describes finite local scope without network readiness probing",
   page.on("request", request => requests.push(request.url()));
   await page.goto("/ask");
   await expect(page.getByTestId("assistant-scope")).toContainText("本地示範");
-  expect(requests.filter(url => /\/api\//.test(url) || new URL(url).origin !== "http://127.0.0.1:3000")).toEqual([]);
+  expect(requests.filter(url => /\/api\//.test(url) || new URL(url).origin !== new URL(test.info().project.use.baseURL!).origin)).toEqual([]);
   await expect(page.getByTestId("chat-page")).not.toContainText("HKBU");
 });
 

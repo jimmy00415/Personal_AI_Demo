@@ -206,7 +206,7 @@ test("emergency_is_retained_in_tab_but_rechecked_in_fresh_session", async ({ pag
   const before = await page.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!));
   const context = await browser.newContext({ storageState: await page.context().storageState() });
   const fresh = await context.newPage();
-  await fresh.goto("http://127.0.0.1:3000/ask");
+  await fresh.goto(new URL("/ask", test.info().project.use.baseURL!).href);
   await expect(fresh.getByTestId("emergency-state")).toHaveCount(0);
   await expect(fresh.getByTestId("quick-reply-chest-breath")).toBeVisible();
   const after = await fresh.evaluate(() => JSON.parse(localStorage.getItem("caremate-v4")!));

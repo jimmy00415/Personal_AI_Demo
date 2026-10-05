@@ -23,7 +23,7 @@ function authorised() {
 
 test("authorise_record_event_response_patient_receipt_is_complete", async ({ page }) => {
   const external: string[] = [];
-  page.on("request", r => { if (r.url().includes("/api/") || !r.url().startsWith("http://127.0.0.1:3000")) external.push(r.url()); });
+  page.on("request", r => { if (r.url().includes("/api/") || !r.url().startsWith(new URL(test.info().project.use.baseURL!).origin)) external.push(r.url()); });
   await start(page, createScenario("share-needed"), "/sharing");
   await page.getByTestId("level-alerts-only").check(); await page.getByTestId("category-body").check();
   await page.getByTestId("sharing-review").click(); await page.getByTestId("sharing-confirm").click();

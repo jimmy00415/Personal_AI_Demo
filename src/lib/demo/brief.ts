@@ -1,6 +1,7 @@
 import { clockParts, formatDateTime } from "../clock";
 import { messages } from "../i18n";
 import { selectSharingProjection } from "./sharing";
+import { currentOrganisedRecord, selectEpisodeObservation } from "./episode-facts";
 import type { ActionResult, BriefPacket, DemoState, Locale, Localized, MedicationDose, PatientId, RecipientId, ShareCategory } from "./types";
 
 const fail = (code: string): ActionResult<never> => ({ ok: false, code });
@@ -45,7 +46,8 @@ function build(state: DemoState, patientId: PatientId, options: { appointmentId:
   const p = projection && !options.includeMood ? selectSharingProjection({ ...state, grants: state.grants.map(g => g.patientId === patientId && g.recipientId === options.recipientId ? { ...g, categories: g.categories.filter(c => c !== "mood") } : g) }, patientId, options.recipientId!) : projection;
   const allowed = (category: ShareCategory) => !p || p.categories.includes(category);
   const observations = p ? p.observations : mine(state.observations, patientId).filter(o => Date.parse(o.occurredAt) <= Date.parse(state.clock));
-  const records = (p ? p.healthRecords : mine(state.healthRecords, patientId)).filter(r => !r.supersededByRecordId && r.kind !== "report" && (options.includeMood || !["mood", "private"].includes(r.category)));
+  const records = (p ? p.healthRecords : mine(state.healthRecords, patientId).map(r => currentOrganisedRecord(state, r))).filter(r => !r.supersededByRecordId && r.kind !== "report" && (options.includeMood || !["mood", "private"].includes(r.category)));
+  const organisedObservationIds = p ? [] : state.episodes.flatMap(e => records.some(r => r.source === "organised" && e.sourceRecordIds.includes(r.id)) ? [selectEpisodeObservation(state, e)?.id].filter((id): id is string => !!id) : []);
   const checkIns = p ? p.checkIns : mine(state.checkIns, patientId).filter(c => Date.parse(c.occurredAt) <= Date.parse(state.clock));
   const doses = p ? p.medicationDoses : mine(state.medicationDoses, patientId);
   const reports = p ? p.reports : mine(state.reports, patientId);
@@ -61,7 +63,7 @@ function build(state: DemoState, patientId: PatientId, options: { appointmentId:
     ];
     const latest = [...entries].sort((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt)).at(-1);
     const summary = latest ? join([messages["packet.latestBody"], latest.text, ...(entries.length > 1 ? [counted(messages["packet.bodyHistory"], entries.length - 1)] : [])]) : messages["sharing.bodyEmpty"];
-    add("body", "body", messages["packet.body"], join(entries.length ? entries.map(e => e.text) : [messages["sharing.bodyEmpty"]]), entries.map(e => e.id), summary);
+    add("body", "body", messages["packet.body"], join(entries.length ? entries.map(e => e.text) : [messages["sharing.bodyEmpty"]]), [...new Set([...entries.map(e => e.id), ...organisedObservationIds])], summary);
   }
   if (options.includeMood && allowed("mood") && p?.level !== "summary") add("mood", "mood", messages["packet.mood"], join([
     ...checkIns.flatMap(c => c.mood && c.mood !== "skipped" ? [sourced(messages[`sharing.mood.${c.mood}`], c.occurredAt, "user", c.enteredAt)] : []),

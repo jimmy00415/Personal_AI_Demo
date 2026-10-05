@@ -43,6 +43,7 @@ test("main journey: dizziness, med gap, brief, follow-up, next morning", async (
   await expect(page.getByTestId("toast")).toContainText("已加入健康紀錄");
   await page.getByTestId("prep-visit").click();
   await expect(page.getByTestId("visit-brief")).toBeVisible();
+  await page.getByTestId("brief-details-toggle").click();
   await expect(page.getByTestId("brief-med-correction")).toBeVisible();
   await expect(page.getByTestId("brief-bp")).toContainText("144/90");
   await expect(page.getByTestId("visit-brief")).toContainText("家居量度");
@@ -50,7 +51,7 @@ test("main journey: dizziness, med gap, brief, follow-up, next morning", async (
 
   await page.getByTestId("open-report").click();
   await expect(page.getByTestId("lab-page")).toBeVisible();
-  await expect(page.getByTestId("lab-count")).toHaveText("3");
+  await expect(page.getByTestId("lab-count")).toHaveText("化驗項目：3");
   await page.getByTestId("add-q-q-hba1c-follow").click();
   await expect(page.getByTestId("toast")).toContainText("已加入就診問題");
   await page.getByText("返回就診摘要").click();

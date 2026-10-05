@@ -38,6 +38,7 @@ test("a later visit re-asks the urgent question instead of re-showing the alarm"
 
   await newSession(page);
   await expect(page.getByTestId("emergency-state")).toHaveCount(0);
+  await page.getByTestId("help-recheck").getByRole("link").click();
   await expect(page.getByTestId("quick-reply-chest-breath")).toBeVisible();
   await expect(page.getByTestId("chat-log").getByText("胸口痛或呼吸困難")).toHaveCount(0);
 

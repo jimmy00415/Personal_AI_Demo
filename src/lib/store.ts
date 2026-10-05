@@ -28,6 +28,7 @@ import type {
 import { messages, translate, type MessageKey } from "./i18n";
 import { ensureAssistantSession, getHelpDisposition, getLocalAssistantReply, hasSymptomContext, interruptForHelp } from "./demo/local-assistant";
 import { symptomLine } from "./selectors";
+import { episodeBloodPressure } from "./demo/episode-facts";
 import { NEXT_CLOCK, OPENING_CLOCK } from "./types";
 import type { ActionResult, ActorId, CheckInDraft, DemoState, Observation, ScenarioId } from "./demo/types";
 import { setAppointment, cancelAppointment, createAccompanyTask, completePersonalTask, cancelTask, completeCheckInTask, createAfterVisitTask, followupDraftId, recordContactOutcome, rescheduleTask, scheduleFollowup, setDoseStatus, snoozeTask, type ContactOutcome, type DoseCorrection, type FollowupChange } from "./demo/care";
@@ -739,6 +740,7 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
     }
     const clock = get().clock;
     const already = get().records.some((r) => r.id === "ep-dizzy-16");
+    const pressure = episodeBloodPressure(get().demo, currentEpisode(get().demo));
     const episode = {
       id: "ep-dizzy-16",
       personId: "michelle" as const,
@@ -747,8 +749,8 @@ export const useAppStore = create<AppState & Actions>((rawSet, get) => {
       enteredAt: clock,
       title: { zh: "頭暈整理", en: "Dizziness summary" },
       summary: {
-        zh: `${symptomLine(get().answers, "zh-HK")}。今早血壓151/94。`,
-        en: `${symptomLine(get().answers, "en")}. Morning BP 151/94.`,
+        zh: `${symptomLine(get().answers, "zh-HK")}\n${pressure.zh}`,
+        en: `${symptomLine(get().answers, "en")}\n${pressure.en}`,
       },
       provenance: { source: "organised" as const, occurredAt: "2026-09-16T08:35:00+08:00", enteredAt: clock },
     };
