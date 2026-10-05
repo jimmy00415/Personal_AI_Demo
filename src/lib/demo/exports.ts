@@ -6,7 +6,7 @@ const escape = (s: string) => s.replace(/\\/g, "\\\\").replace(/\r?\n/g, "\\n").
 /** All calendar output uses the same scheduled instant displayed in the task. */
 export function taskToIcs(task: CareTask): string {
   if (!task.scheduledAt || !validInstant(task.scheduledAt)) return "";
-  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//CareMate//Local fictional demo//EN", "BEGIN:VEVENT", `UID:${escape(task.patientId)}-${escape(task.id)}@caremate.local`, `DTSTART:${formatIcsUtc(task.scheduledAt)}`, `SUMMARY:${escape(task.title.en)}`, `DESCRIPTION:${escape(`Fictional local task for ${task.patientId}. No notification or clinical confirmation.`)}`, `STATUS:${task.status === "cancelled" ? "CANCELLED" : "CONFIRMED"}`, "END:VEVENT", "END:VCALENDAR", ""].join("\r\n");
+  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//CareMate//Care tasks//EN", "BEGIN:VEVENT", `UID:${escape(task.patientId)}-${escape(task.id)}@caremate.local`, `DTSTART:${formatIcsUtc(task.scheduledAt)}`, `SUMMARY:${escape(task.title.en)}`, `DESCRIPTION:${escape(`Care task for ${task.patientId}.`)}`, `STATUS:${task.status === "cancelled" ? "CANCELLED" : "CONFIRMED"}`, "END:VEVENT", "END:VCALENDAR", ""].join("\r\n");
 }
 export function downloadTaskIcs(task: CareTask): boolean {
   const ics = taskToIcs(task); if (!ics) return false;

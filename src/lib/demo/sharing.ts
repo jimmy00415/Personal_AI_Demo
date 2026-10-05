@@ -1,4 +1,5 @@
 import { messages } from "../i18n";
+import { productCopy } from "../product-copy";
 import type { ActionResult, ActorId, DemoState, PatientId, RecipientId, ShareCategory, SharingLevel, SharingProjection, HealthRecord, Localized } from "./types";
 
 export const shareCategories: ShareCategory[] = ["body", "mood", "measurements", "medication", "appointments"];
@@ -161,7 +162,7 @@ export function selectSharingProjection(state: DemoState, patientId: PatientId, 
 
 /** Shared display rows also feed exports; no canonical record lookup occurs here. */
 export function sharingRows(p: SharingProjection, locale: "en" | "zh-HK") {
-  const L = (s: Localized) => locale === "en" ? s.en : s.zh;
+  const L = (s: Localized) => productCopy(locale === "en" ? s.en : s.zh);
   const source = (value: "user" | "home-measure" | "imported" | "organised") => L(messages[({ user: "source.user", "home-measure": "source.home", imported: "source.imported", organised: "source.organised" } as const)[value]]);
   return [
     ...p.records.map(r => ({ id: r.id, title: L(r.title), text: L(r.text), occurredAt: r.occurredAt, enteredAt: r.enteredAt, source: source(r.source) })),
@@ -175,6 +176,6 @@ export function sharedExportText(state: DemoState, patientId: PatientId, recipie
   if (state.context.patientId !== patientId || state.context.actorId === "david" && recipientId !== "david") return fail("recipient-unavailable");
   const p = selectSharingProjection(state, patientId, recipientId);
   if (p.status !== "active" || p.level === "alerts-only") return fail("sharing-unavailable");
-  const L = (s: Localized) => locale === "en" ? s.en : s.zh;
+  const L = (s: Localized) => productCopy(locale === "en" ? s.en : s.zh);
   return { ok: true, value: [L(messages["sharing.exportTitle"]), L(messages["sharing.exportNote"]), L(messages[`sharing.${recipientId}`]), ...p.summary.map(L), ...sharingRows(p, locale).map(r => `${r.title}: ${r.text}\n${r.occurredAt} · ${r.enteredAt} · ${r.source}`), ...p.appointments.map(a => `${L(a.title)} · ${a.scheduledAt} · ${L(a.location)}`), ...p.tasks.map(t => `${L(t.title)} · ${t.scheduledAt ?? ""} · ${L(messages[`care.${t.status}`])}`), ...p.events.map(e => `${L(e.text)} · ${e.occurredAt}`)].join("\n") };
 }

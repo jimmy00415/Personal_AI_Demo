@@ -37,7 +37,7 @@ export function BookPage() {
     const current = useAppStore.getState().demo.appointments.find(a => a.id === appointment?.id && a.status === "scheduled");
     if (!current || useAppStore.getState().demo.context.actorId !== "may") return;
     const end = new Date(Date.parse(current.scheduledAt) + 30 * 60_000).toISOString();
-    const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//CareMate//Local fictional itinerary//EN", "BEGIN:VEVENT", `UID:${current.patientId}-${current.id}@caremate.local`, `DTSTART:${formatIcsUtc(current.scheduledAt)}`, `DTEND:${formatIcsUtc(end)}`, "SUMMARY:Family doctor follow-up", "DESCRIPTION:Fictional local itinerary for May. No clinic notification or clinical confirmation.", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+    const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//CareMate//Appointment itinerary//EN", "BEGIN:VEVENT", `UID:${current.patientId}-${current.id}@caremate.local`, `DTSTART:${formatIcsUtc(current.scheduledAt)}`, `DTEND:${formatIcsUtc(end)}`, "SUMMARY:Family doctor follow-up", "DESCRIPTION:Follow-up appointment for May. Contact the clinic to confirm arrangements.", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
     const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = "caremate-appointment.ics"; anchor.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);

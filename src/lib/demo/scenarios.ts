@@ -21,7 +21,7 @@ export function createScenario(id: ScenarioId): DemoState {
     healthRecords: fixture.createRecords().map(r => ({ id: r.id, patientId: "may", category: r.kind === "report" ? "measurements" : r.kind === "symptom" ? "body" : "private", source: r.provenance.source, occurredAt: r.occurredAt, enteredAt: r.enteredAt, text: r.summary, title: r.title, kind: r.kind, revision: 1 })),
     observations: fixture.bpReadings.map(r => ({ id: r.id, patientId: "may", occurredAt: r.occurredAt, enteredAt: r.occurredAt, systolic: r.systolic, diastolic: r.diastolic, source: "home-measure", revision: 1 })),
     checkIns: [], drafts: [], episodes: [], assistantSessions: [],
-    reports: [{ id: fixture.report.id, patientId: "may", title: fixture.report.title, originalText: { zh: "虛構血液化驗報告：HbA1c 6.4%；LDL 2.7 mmol/L；肌酐 71 μmol/L。", en: "Fictional blood test report: HbA1c 6.4%; LDL 2.7 mmol/L; creatinine 71 μmol/L." }, occurredAt: fixture.report.occurredAt, enteredAt: fixture.report.enteredAt, results: structuredClone(fixture.report.results), category: "measurements", source: "imported", revision: 1 }],
+    reports: [{ id: fixture.report.id, patientId: "may", title: fixture.report.title, originalText: { zh: "血液化驗報告：HbA1c 6.4%；LDL 2.7 mmol/L；肌酐 71 μmol/L。", en: "Blood test report: HbA1c 6.4%; LDL 2.7 mmol/L; creatinine 71 μmol/L." }, occurredAt: fixture.report.occurredAt, enteredAt: fixture.report.enteredAt, results: structuredClone(fixture.report.results), category: "measurements", source: "imported", revision: 1 }],
     questions: fixture.defaultQuestions.map(q => ({ id: q.id, patientId: "may", text: q.text, selected: q.added })),
     medicationDoses: fixture.createDoses().map(d => {
       const med = fixture.michelleMeds.find(m => m.id === d.medicationId)!;

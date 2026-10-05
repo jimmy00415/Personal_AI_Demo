@@ -1,5 +1,6 @@
 import { clockParts, formatDateTime } from "../clock";
 import { messages } from "../i18n";
+import { productCopy } from "../product-copy";
 import { selectSharingProjection } from "./sharing";
 import { currentOrganisedRecord, selectEpisodeObservation } from "./episode-facts";
 import type { ActionResult, BriefPacket, DemoState, Locale, Localized, MedicationDose, PatientId, RecipientId, ShareCategory } from "./types";
@@ -150,6 +151,6 @@ export function prepareBriefExport(state: DemoState, briefId: string, recipientI
   return result.ok && result.value.status !== "confirmed" ? fail("review-required") : result;
 }
 export function briefToText(packet: BriefPacket, locale: Locale): string {
-  const L = (text: Localized) => locale === "en" ? text.en : text.zh;
+  const L = (text: Localized) => productCopy(locale === "en" ? text.en : text.zh);
   return [L(messages["packet.title"]), `${L(messages["packet.patient"])} · ${L(messages["ask.person"])}`, `${L(messages[packet.status === "confirmed" ? "packet.confirmed" : "packet.draft"])} · ${L(messages["packet.revision"])} ${packet.revision}`, `${L(messages["packet.updated"])} · ${formatDateTime(packet.generatedAt, locale)}`, packet.recipientId === "may" ? L(messages["packet.personal"]) : L(messages[`sharing.${packet.recipientId}`]), ...packet.sections.flatMap(s => ["", L(s.title), L(s.text)]), "", L(messages["brief.s6"]), ...packet.questions.map(q => `• ${L(q.text)}`), "", L(messages["packet.local"])].join("\n");
 }
