@@ -1,18 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f7f8f6;
+  --background: #f3f6f5;
   --surface: #ffffff;
   --surface-secondary: #f1f4f1;
   --text-primary: #171a18;
-  --text-secondary: #626962;
-  --text-tertiary: #8c938d;
-  --brand: #1f5f52;
+  --text-secondary: #53635e;
+  --text-tertiary: #64756d;
+  --brand: #227563;
   --brand-deep: #15463c;
   --brand-soft: #e6f0ed;
-  --line: #e4e8e4;
-  --attention: #9a7b2f;
-  --attention-soft: #f4edd8;
+  --line: #dbe5e0;
+  --attention: #805b14;
+  --attention-soft: #fff3d8;
+  --sky: #315f88;
+  --sky-soft: #eaf2fa;
+  --violet: #6a508b;
+  --violet-soft: #f1ecf8;
   --critical: #b42318;
   --critical-soft: #f7e7e5;
   --success: #2f6f4e;
@@ -42,6 +46,10 @@
   --color-critical: var(--critical);
   --color-critical-soft: var(--critical-soft);
   --color-success: var(--success);
+  --color-sky: var(--sky);
+  --color-sky-soft: var(--sky-soft);
+  --color-violet: var(--violet);
+  --color-violet-soft: var(--violet-soft);
   --font-cjk: "Noto Sans TC", "PingFang TC", "Hiragino Sans CNS", "Microsoft JhengHei", "Source Han Sans TC";
   --font-sans: var(--font-cjk), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
@@ -132,7 +140,65 @@ html.lite [role="button"] {
   overflow: hidden;
   border-radius: var(--radius-lg);
   background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 3px 12px rgba(21, 70, 60, 0.025);
 }
+
+.sidebar {
+  background: #173f36;
+  background-image: radial-gradient(ellipse at 0% 0%, rgba(87, 163, 136, 0.2), transparent 65%);
+}
+
+@layer components {
+  .panel {
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    background: var(--surface);
+    padding: 24px;
+    box-shadow: 0 4px 20px rgba(21, 70, 60, 0.035);
+  }
+}
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+.login-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(460px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: 0 32px 100px rgba(18, 48, 39, 0.2);
+}
+
+.login-dialog::backdrop {
+  background: rgba(15, 36, 30, 0.45);
+  backdrop-filter: blur(5px);
+}
+
+.form-input {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--background);
+  font-size: 15px;
+}
+
+.form-input:focus {
+  border-color: var(--brand);
+  outline-color: var(--brand);
+}
+
+summary { cursor: pointer; }
 
 .grouped > * + * {
   border-top: 1px solid var(--line);

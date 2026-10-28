@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { Languages, Monitor, Database, UserRound, LogIn, LogOut } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useI18n } from "@/lib/use-i18n";
 import type { SceneId } from "@/lib/types";
 import { Button } from "@/components/system";
+import { useDemoAccount } from "@/lib/demo-account";
 
 export function SettingsPage() {
   const { t, locale, liteMode } = useI18n();
@@ -13,11 +15,22 @@ export function SettingsPage() {
   const setLiteMode = useAppStore((s) => s.setLiteMode);
   const clearDeviceData = useAppStore((s) => s.clearDeviceData);
   const [confirmClear, setConfirmClear] = useState(false);
+  const user = useDemoAccount((s) => s.user);
+  const openLogin = useDemoAccount((s) => s.openLogin);
+  const signOut = useDemoAccount((s) => s.signOut);
   return (
     <div className="mx-auto max-w-[640px]" data-testid="settings-page">
-      <h1 className="text-[30px]">{t("settings.title")}</h1>
-      <h2 className="mt-8 text-[13px] text-ink-soft">{t("nav.language")}</h2>
-      <div className="mt-2 flex gap-2">
+      <h1 className="title-1">{t("settings.title")}</h1>
+      <section className="panel mt-7 border-brand/20 bg-brand-soft/40">
+        <div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-soft text-brand"><UserRound className="h-5 w-5" /></span><h2 className="text-[18px] font-medium">{t("account.title")}</h2></div>
+        <p className="mt-4 break-all text-[20px] font-medium">{user?.name ?? t("account.guest")}</p>
+        {user ? <p className="mt-1 break-all text-[14px] text-ink-muted">{user.email}</p> : null}
+        <p className="mt-2 text-[14px] text-ink-muted">{t(user ? "account.signedIn" : "account.guestBody")}</p>
+        {user ? <Button data-testid="account-logout" variant="secondary" className="mt-4" onClick={signOut}><LogOut className="h-4 w-4" />{t("account.logout")}</Button> : <Button data-testid="settings-login" className="mt-4" onClick={openLogin}><LogIn className="h-4 w-4" />{t("account.login")}</Button>}
+      </section>
+      <section className="panel mt-4">
+      <h2 className="flex items-center gap-2 text-[16px] font-medium"><Languages className="h-5 w-5 text-sky" />{t("nav.language")}</h2>
+      <div className="mt-4 flex flex-wrap gap-2">
         <Button variant={locale === "zh-HK" ? "primary" : "secondary"} onClick={() => setLocale("zh-HK")}>
           {t("lang.zh")}
         </Button>
@@ -25,11 +38,15 @@ export function SettingsPage() {
           {t("lang.en")}
         </Button>
       </div>
-      <h2 className="mt-8 text-[13px] text-ink-soft">{t("nav.display")}</h2>
-      <Button data-testid="lite-toggle-settings" className="mt-2" variant={liteMode ? "primary" : "secondary"} onClick={() => setLiteMode(!liteMode)}>
+      </section>
+      <section className="panel mt-4">
+      <h2 className="flex items-center gap-2 text-[16px] font-medium"><Monitor className="h-5 w-5 text-violet" />{t("nav.display")}</h2>
+      <Button data-testid="lite-toggle-settings" className="mt-4" variant={liteMode ? "primary" : "secondary"} onClick={() => setLiteMode(!liteMode)}>
         {liteMode ? t("lite.on") : t("lite.off")}
       </Button>
-      <h2 className="mt-8 text-[13px] text-ink-soft">{t("settings.data")}</h2>
+      </section>
+      <section className="panel mt-4">
+      <h2 className="flex items-center gap-2 text-[16px] font-medium"><Database className="h-5 w-5 text-attention" />{t("settings.data")}</h2>
       <p className="measure mt-2 text-[15px] text-ink-muted">{t("settings.dataBody")}</p>
       {confirmClear ? (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -38,6 +55,7 @@ export function SettingsPage() {
             data-testid="clear-device-confirm"
             onClick={() => {
               setConfirmClear(false);
+              signOut();
               clearDeviceData();
             }}
           >
@@ -52,6 +70,7 @@ export function SettingsPage() {
           {t("settings.clearData")}
         </Button>
       )}
+      </section>
       <div className="mt-10">
         <Link href="/about" className="text-brand">
           {t("nav.about")}

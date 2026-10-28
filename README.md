@@ -23,6 +23,14 @@ npm run test
 
 Do not record from the development server.
 
+## Guest entry and login preview
+
+The app starts as a guest. The header **登入 / Log in** button and Settings account card open a frontend-only login modal. Choose **填入示範帳密 / Fill sample credentials** to use `demo@caremate.hk` / `demo1234`, then submit. Any syntactically valid email and sample password of at least six characters can preview the interface; no account is verified and passwords are never sent or saved.
+
+Only the display name and email remain in this tab's `sessionStorage`. Log out in Settings or clear this device's data to return to Guest. Health records remain explicitly labelled as Michelle Chan's sample care journey for both guests and signed-in previews.
+
+The refreshed Today page groups the daily focus, blood pressure, care shortcuts and appointment into colored cards. Today's tasks, follow-up details and shared family records can be collapsed and expanded.
+
 ## Local HKBU chat (optional)
 
 GitHub Pages cannot hold the API key. For the simplest live demo, run the Next server on this machine:
@@ -75,7 +83,7 @@ Recording should still use `npm run build` / `npm start` without `GITHUB_PAGES`,
 | `/family` | Mother’s shared appointment and BP only |
 | `/memory` | What CareMate understands — can stop personalisation |
 | `/about` | Product scope |
-| `/settings` | Language, larger text |
+| `/settings` | Demo account, language, larger text, device data |
 | `/dev` | Recording controller (Ctrl+Shift+D) |
 
 `/visit` → `/brief`. `/journey` → `/health`. `/plan` → `/care`.
