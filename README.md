@@ -25,11 +25,25 @@ Do not record from the development server.
 
 ## Guest entry and login preview
 
-The app starts as a guest. The header **登入 / Log in** button and Settings account card open a frontend-only login modal. Choose **填入示範帳密 / Fill sample credentials** to use `demo@caremate.hk` / `demo1234`, then submit. Any syntactically valid email and sample password of at least six characters can preview the interface; no account is verified and passwords are never sent or saved.
+The app starts as a guest. The header **登入 / Log in** button and Settings account card open a frontend-only login modal. Select patient, family or caregiver, then choose **填入示範帳密 / Fill sample credentials** to use `demo@caremate.hk` / `demo1234`. Any syntactically valid email and sample password of at least six characters can preview the interface; no account is verified and passwords are never sent or saved.
 
-Only the display name and email remain in this tab's `sessionStorage`. Log out in Settings or clear this device's data to return to Guest. Health records remain explicitly labelled as Michelle Chan's sample care journey for both guests and signed-in previews.
+Only the display name, email and selected role remain in this tab's `sessionStorage`. Log out in Settings or clear this device's data to return to Guest in the patient preview. Health records remain explicitly labelled as Michelle Chan's sample care journey for both guests and signed-in previews.
 
 The refreshed Today page groups the daily focus, blood pressure, care shortcuts and appointment into colored cards. Today's tasks, follow-up details and shared family records can be collapsed and expanded.
+
+## Three role workspaces
+
+- **Patient:** existing AI check-in, medication reminders, health records and outbound sharing controls.
+- **Family:** shared health data and an attention-alert inbox with reviewed/unreviewed status.
+- **Caregiver:** shared health and alerts plus a reversible care checklist with progress saved on this device.
+
+Use the header role selector to preview the different task spaces. Patient-only routes show a role notice when entered from a supporter workspace. This is a frontend demonstration, not an access-control backend.
+
+Patient Sharing controls separately enable blood pressure, symptom notes, appointments, medication information and alerts for family and caregiver. The new `caremate-workspace-v1` local-storage key saves those demo grants, recipient-specific alert review and caregiver checklist completion. Revoking a scope removes its facts, alert evidence and related care tasks. Reviewing an alert does not mean a health issue is resolved; checklist completion does not administer medication or contact anyone. Mum's existing inbound sharing flow remains separate.
+
+The **較大文字 / Larger text** setting now scales rem-based typography throughout headings, cards, navigation and form controls. Role colors and small labels have browser-verified contrast. Both languages are checked at 320px, 390px and 768px widths.
+
+Editable design reference: [CareMate three-role Figma board](https://www.figma.com/design/BLVY5qMDJxEzar5xmZMzXo?node-id=3-75).
 
 ## Local HKBU chat (optional)
 
@@ -81,6 +95,10 @@ Recording should still use `npm run build` / `npm start` without `GITHUB_PAGES`,
 | `/report` | Blood test (exactly 3 results) |
 | `/print` | Printable brief |
 | `/family` | Mother’s shared appointment and BP only |
+| `/sharing` | Patient's outbound sharing controls; link to Mum's inbound data |
+| `/shared` | Family/caregiver permission-filtered shared health |
+| `/alerts` | Family/caregiver attention alerts and review status |
+| `/checklist` | Caregiver checklist, progress and undo |
 | `/memory` | What CareMate understands — can stop personalisation |
 | `/about` | Product scope |
 | `/settings` | Demo account, language, larger text, device data |

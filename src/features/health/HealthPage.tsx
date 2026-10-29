@@ -67,7 +67,7 @@ export function HealthPage() {
     <div className="mx-auto max-w-[760px]" data-testid="health-page">
       <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-soft text-sky"><HeartPulse className="h-6 w-6" aria-hidden /></div>
       <h1 className="title-1">{t("health.title")}</h1>
-      <p className="mt-2 text-[15px] text-ink-muted">{locale === "en" ? "Your records, measurements and reports, together." : "健康紀錄、量度及報告，一目了然。"}</p>
+      <p className="mt-2 text-[0.9375rem] text-ink-muted">{locale === "en" ? "Your records, measurements and reports, together." : "健康紀錄、量度及報告，一目了然。"}</p>
       <div className="mt-6 flex gap-1 overflow-x-auto rounded-2xl border border-line bg-surface p-1.5" aria-label={t("health.title")}>
         {tabs.map((item) => (
           <button
@@ -76,7 +76,7 @@ export function HealthPage() {
             data-testid={`health-tab-${item.id}`}
             aria-pressed={tab === item.id}
             onClick={() => setHealthTab(item.id)}
-            className={`flex min-h-12 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-[13px] font-medium transition-colors ${tab === item.id ? "bg-brand text-white shadow-sm" : "text-ink-muted hover:bg-brand-soft hover:text-brand"}`}
+            className={`flex min-h-12 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-[0.8125rem] font-medium transition-colors ${tab === item.id ? "bg-brand text-white shadow-sm" : "text-ink-muted hover:bg-brand-soft hover:text-brand"}`}
           >
             <item.icon className="hidden h-4 w-4 shrink-0 sm:block" aria-hidden />
             {t(item.key)}
@@ -90,27 +90,27 @@ export function HealthPage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="eyebrow text-sky">{t("health.focus")}</p>
-                <h2 className="mt-2 text-[23px] font-semibold">{t("health.bpMgmt")}</h2>
+                <h2 className="mt-2 text-[1.4375rem] font-semibold">{t("health.bpMgmt")}</h2>
               </div>
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/80 text-sky"><Activity className="h-5 w-5" aria-hidden /></span>
             </div>
             <div className="mt-6 flex flex-wrap items-end gap-x-4 gap-y-1">
-              <p className="text-[36px] font-semibold leading-tight tracking-tight text-sky">{avg.systolic} <span className="text-sky/50">/</span> {avg.diastolic} <span className="text-[14px] font-medium">mmHg</span></p>
-              <p className="pb-1 text-[13px] text-ink-muted">{t("health.avg")}</p>
+              <p className="text-[2.25rem] font-semibold leading-tight tracking-tight text-sky">{avg.systolic} <span className="text-sky/50">/</span> {avg.diastolic} <span className="text-[0.875rem] font-medium">mmHg</span></p>
+              <p className="pb-1 text-[0.8125rem] text-ink-muted">{t("health.avg")}</p>
             </div>
-            <p className="mt-6 text-[13px] font-medium text-ink-muted">{t("health.sys")}</p>
+            <p className="mt-6 text-[0.8125rem] font-medium text-ink-muted">{t("health.sys")}</p>
             <BloodPressureChart values={readings.map((r) => r.systolic)} label={t("health.sys")} />
-            <div className="flex justify-between text-[12px] text-ink-muted"><span>{trendDates[0]}</span><span>{trendDates[1]}</span></div>
+            <div className="flex justify-between text-[0.75rem] text-ink-muted"><span>{trendDates[0]}</span><span>{trendDates[1]}</span></div>
           </section>
           <div className="grid gap-4 sm:grid-cols-2">
             <button type="button" onClick={() => setHealthTab("measurements")} className="panel group flex items-center gap-4 text-left transition-colors hover:border-sky/40">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-soft text-sky"><HeartPulse className="h-5 w-5" aria-hidden /></span>
-              <span className="flex-1 text-[15px] font-medium">{t("today.viewBp")}</span>
+              <span className="flex-1 text-[0.9375rem] font-medium">{t("today.viewBp")}</span>
               <ArrowUpRight className="h-4 w-4 text-sky" aria-hidden />
             </button>
             <button type="button" onClick={() => router.push("/report")} className="panel flex items-center gap-4 text-left transition-colors hover:border-violet/40">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-soft text-violet"><FileText className="h-5 w-5" aria-hidden /></span>
-              <span className="min-w-0 flex-1"><span className="block text-[15px] font-medium">{t("report.title")}</span><span className="mt-1 block text-[12px] text-ink-muted">{t("report.sub")}</span></span>
+              <span className="min-w-0 flex-1"><span className="block text-[0.9375rem] font-medium">{t("report.title")}</span><span className="mt-1 block text-[0.75rem] text-ink-muted">{t("report.sub")}</span></span>
               <ArrowUpRight className="h-4 w-4 shrink-0 text-violet" aria-hidden />
             </button>
           </div>
@@ -132,11 +132,11 @@ export function HealthPage() {
             >
               <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${r.kind === "report" ? "bg-violet-soft text-violet" : "bg-brand-soft text-brand"}`}>{r.kind === "report" ? <FileText className="h-5 w-5" aria-hidden /> : <ClipboardList className="h-5 w-5" aria-hidden />}</span>
               <div className="min-w-0 flex-1">
-                <div className="text-[12px] text-ink-muted">
+                <div className="text-[0.75rem] text-ink-muted">
                   {formatShortDate(r.occurredAt, locale)} · <SourceLabel source={r.provenance.source} />
                 </div>
-                <div className="mt-1.5 text-[17px] font-medium">{L(r.title)}</div>
-                <p className="mt-1.5 text-[14px] leading-relaxed text-ink-muted">{L(r.summary)}</p>
+                <div className="mt-1.5 text-[1.0625rem] font-medium">{L(r.title)}</div>
+                <p className="mt-1.5 text-[0.875rem] leading-relaxed text-ink-muted">{L(r.summary)}</p>
               </div>
               <ChevronRight className="mt-3 h-4 w-4 shrink-0 text-ink-muted" aria-hidden />
             </button>
@@ -147,13 +147,13 @@ export function HealthPage() {
       {tab === "measurements" ? (
         <div className="mt-6 space-y-5">
           <section className="rounded-[24px] border border-sky/15 bg-sky-soft p-5 sm:p-7">
-            <h2 className="flex items-center gap-2 text-[15px] font-semibold text-sky"><Activity className="h-5 w-5" aria-hidden />{t("health.sys")}</h2>
+            <h2 className="flex items-center gap-2 text-[0.9375rem] font-semibold text-sky"><Activity className="h-5 w-5" aria-hidden />{t("health.sys")}</h2>
             <BloodPressureChart values={readings.map((r) => r.systolic)} label={t("health.sys")} />
-            <div className="flex justify-between text-[12px] text-ink-muted"><span>{trendDates[0]}</span><span>{trendDates[1]}</span></div>
+            <div className="flex justify-between text-[0.75rem] text-ink-muted"><span>{trendDates[0]}</span><span>{trendDates[1]}</span></div>
           </section>
           <section className="panel overflow-x-auto">
-          <h2 className="text-[17px] font-semibold">{t("health.table")}</h2>
-          <table className="mt-4 w-full text-left text-[13px] sm:text-[15px]" data-testid="bp-table">
+          <h2 className="text-[1.0625rem] font-semibold">{t("health.table")}</h2>
+          <table className="mt-4 w-full text-left text-[0.8125rem] sm:text-[0.9375rem]" data-testid="bp-table">
             <thead>
               <tr className="text-ink-muted">
                 <th className="py-2 pr-3 font-medium">{t("health.dateCol")}</th>
@@ -192,7 +192,7 @@ export function HealthPage() {
 
       {tab === "reports" ? (
         <section className="mt-6 rounded-[24px] border border-violet/15 bg-violet-soft p-5 sm:p-6">
-          <h2 className="mb-4 flex items-center gap-2 text-[17px] font-semibold text-violet"><FileText className="h-5 w-5" aria-hidden />{t("health.reports")}</h2>
+          <h2 className="mb-4 flex items-center gap-2 text-[1.0625rem] font-semibold text-violet"><FileText className="h-5 w-5" aria-hidden />{t("health.reports")}</h2>
           <GroupedList><ListRow title={t("report.title")} meta={t("report.sub")} onClick={() => router.push("/report")} /></GroupedList>
         </section>
       ) : null}
@@ -205,28 +205,28 @@ export function HealthPage() {
       >
         {event ? (
           <div>
-            <p className="text-[13px] text-ink-soft">
+            <p className="text-[0.8125rem] text-ink-soft">
               {formatShortDate(event.occurredAt, locale)} {formatTime(event.occurredAt, locale)}
             </p>
             <p className="mt-3">{L(event.summary)}</p>
-            <p className="mt-4 text-[13px] text-ink-soft">
+            <p className="mt-4 text-[0.8125rem] text-ink-soft">
               <SourceLabel source={event.provenance.source} />
             </p>
           </div>
         ) : null}
         {reading ? (
           <div data-testid="bp-detail">
-            <p className="text-[22px]">
-              {reading.systolic}/{reading.diastolic} <span className="text-[15px] text-ink-soft">mmHg</span>
+            <p className="text-[1.375rem]">
+              {reading.systolic}/{reading.diastolic} <span className="text-[0.9375rem] text-ink-soft">mmHg</span>
             </p>
-            <p className="mt-2 text-[13px] text-ink-soft">
+            <p className="mt-2 text-[0.8125rem] text-ink-soft">
               {formatShortDate(reading.occurredAt, locale)} {formatTime(reading.occurredAt, locale)}
             </p>
             <p className="mt-3">
               <SourceLabel source="home-measure" />
             </p>
-            <p className="mt-6 text-[15px]">{t("health.correct")}</p>
-            <p className="mt-1 text-[13px] text-ink-muted">{t("health.correctHint")}</p>
+            <p className="mt-6 text-[0.9375rem]">{t("health.correct")}</p>
+            <p className="mt-1 text-[0.8125rem] text-ink-muted">{t("health.correctHint")}</p>
             <textarea
               aria-label={t("health.correct")}
               value={noteDraft}
@@ -243,7 +243,7 @@ export function HealthPage() {
             >
               {t("common.save")}
             </Button>
-            {readingNotes[reading.id] ? <p className="mt-3 text-[14px] text-ink-muted">{readingNotes[reading.id]}</p> : null}
+            {readingNotes[reading.id] ? <p className="mt-3 text-[0.875rem] text-ink-muted">{readingNotes[reading.id]}</p> : null}
           </div>
         ) : null}
       </Sheet>

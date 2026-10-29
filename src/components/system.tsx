@@ -19,16 +19,16 @@ export function PageHeader({
 }) {
   return (
     <header className="mb-8">
-      {kicker ? <div className="mb-3 text-[12px] text-ink-soft">{kicker}</div> : null}
+      {kicker ? <div className="mb-3 text-[0.75rem] text-ink-soft">{kicker}</div> : null}
       <h1 className="title-1">{title}</h1>
-      {subtitle ? <p className="measure mt-2 text-[15px] text-ink-muted">{subtitle}</p> : null}
+      {subtitle ? <p className="measure mt-2 text-[0.9375rem] text-ink-muted">{subtitle}</p> : null}
     </header>
   );
 }
 
 export function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <h2 className="mb-2 px-1 text-[13px] font-medium uppercase tracking-[0.06em] text-ink-soft">
+    <h2 className="mb-2 px-1 text-[0.8125rem] font-medium uppercase tracking-[0.06em] text-ink-soft">
       {children}
     </h2>
   );
@@ -58,10 +58,10 @@ export function ListRow({
   const inner = (
     <>
       <div className="min-w-0 flex-1">
-        <div className="text-[16px] text-ink">{title}</div>
-        {meta ? <div className="mt-0.5 text-[13px] text-ink-muted">{meta}</div> : null}
+        <div className="text-[1rem] text-ink">{title}</div>
+        {meta ? <div className="mt-0.5 text-[0.8125rem] text-ink-muted">{meta}</div> : null}
       </div>
-      {value ? <div className="shrink-0 text-right text-[15px] text-ink-muted">{value}</div> : null}
+      {value ? <div className="shrink-0 text-right text-[0.9375rem] text-ink-muted">{value}</div> : null}
       {trailing}
     </>
   );
@@ -95,7 +95,7 @@ export function SourceLabel({ source }: { source: SourceClass }) {
         : source === "organised"
           ? t("source.organised")
           : t("source.user");
-  return <span className="text-[12px] text-ink-soft">{label}</span>;
+  return <span className="text-[0.75rem] text-ink-soft">{label}</span>;
 }
 
 export function Button({
@@ -111,7 +111,7 @@ export function Button({
     <button
       type={type}
       className={cn(
-        "inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] px-4 py-2.5 text-[15px] transition-colors disabled:opacity-40",
+        "inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] px-4 py-2.5 text-[0.9375rem] transition-colors disabled:opacity-40",
         variant === "primary" && "bg-brand text-white hover:bg-brand-deep",
         variant === "secondary" && "bg-surface-secondary text-ink hover:bg-line",
         variant === "ghost" && "text-brand hover:bg-brand-soft",

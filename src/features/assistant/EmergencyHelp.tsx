@@ -11,16 +11,16 @@ export function EmergencyHelp() {
   return (
     <div className="mx-auto max-w-xl py-6" data-testid="chat-page">
       <section data-testid="emergency-state" className="min-h-[70vh]">
-        <h1 className="text-[32px] leading-tight text-critical">{t("em.title")}</h1>
-        <p className="measure mt-6 text-[20px] leading-relaxed">{t("em.body")}</p>
-        <p className="mt-8 text-[48px] font-medium text-critical" data-testid="call-999">
+        <h1 className="text-[2rem] leading-tight text-critical">{t("em.title")}</h1>
+        <p className="measure mt-6 text-[1.25rem] leading-relaxed">{t("em.body")}</p>
+        <p className="mt-8 text-[3rem] font-medium text-critical" data-testid="call-999">
           {t("em.call")}
         </p>
-        <p className="mt-2 text-[15px] text-ink-muted">{t("em.noCall")}</p>
+        <p className="mt-2 text-[0.9375rem] text-ink-muted">{t("em.noCall")}</p>
         <button
           type="button"
           data-testid="em-how"
-          className="mt-8 text-[15px] text-brand"
+          className="mt-8 text-[0.9375rem] text-brand"
           onClick={() => setHow((open) => !open)}
         >
           {t("em.how")}
@@ -31,7 +31,7 @@ export function EmergencyHelp() {
           </p>
         ) : null}
         <div className="mt-10">
-          <Link href="/" data-testid="em-back" className="inline-flex min-h-12 items-center text-[15px] text-ink-muted">
+          <Link href="/" data-testid="em-back" className="inline-flex min-h-12 items-center text-[0.9375rem] text-ink-muted">
             {t("em.back")}
           </Link>
         </div>

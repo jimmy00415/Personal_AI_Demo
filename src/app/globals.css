@@ -1,22 +1,24 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f3f6f5;
+  --background: #f6f7f5;
   --surface: #ffffff;
   --surface-secondary: #f1f4f1;
-  --text-primary: #171a18;
-  --text-secondary: #53635e;
-  --text-tertiary: #64756d;
-  --brand: #227563;
+  --text-primary: #18322f;
+  --text-secondary: #586e68;
+  --text-tertiary: #5d7069;
+  --brand: #117466;
   --brand-deep: #15463c;
-  --brand-soft: #e6f0ed;
-  --line: #dbe5e0;
-  --attention: #805b14;
-  --attention-soft: #fff3d8;
-  --sky: #315f88;
-  --sky-soft: #eaf2fa;
-  --violet: #6a508b;
-  --violet-soft: #f1ecf8;
+  --brand-soft: #e6f5ef;
+  --line: #e1e8e5;
+  --attention: #91521f;
+  --attention-soft: #fff2e5;
+  --sky: #2c6a94;
+  --sky-soft: #eaf3fa;
+  --violet: #6252a4;
+  --violet-soft: #f0ecfa;
+  --role-accent: #117466;
+  --role-soft: #e6f5ef;
   --critical: #b42318;
   --critical-soft: #f7e7e5;
   --success: #2f6f4e;
@@ -64,7 +66,7 @@ body {
   background: var(--background);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 16px;
+  font-size: 1rem;
   line-height: 1.55;
 }
 
@@ -76,14 +78,12 @@ html[lang="zh-HK"] [data-testid="call-999"] {
 }
 
 html.lite {
+  font-size: 19px;
   --text-secondary: #3d433e;
   --text-tertiary: #5c635d;
 }
 
-html.lite body {
-  font-size: 19px;
-  line-height: 1.65;
-}
+html.lite body { line-height: 1.65; }
 
 html.lite .lite-hide,
 html.lite .meta-secondary {
@@ -107,27 +107,27 @@ html.lite [role="button"] {
 }
 
 .display {
-  font-size: clamp(32px, 4vw, 42px);
+  font-size: clamp(2rem, 4vw, 2.625rem);
   line-height: 1.18;
   font-weight: 560;
   letter-spacing: -0.03em;
 }
 
 .title-1 {
-  font-size: clamp(28px, 3vw, 32px);
+  font-size: clamp(1.75rem, 3vw, 2rem);
   line-height: 1.25;
   font-weight: 560;
   letter-spacing: -0.025em;
 }
 
 .title-2 {
-  font-size: 24px;
+  font-size: 1.5rem;
   line-height: 1.25;
   font-weight: 560;
 }
 
 .headline {
-  font-size: 18px;
+  font-size: 1.125rem;
   line-height: 1.35;
   font-weight: 520;
 }
@@ -145,8 +145,41 @@ html.lite [role="button"] {
 }
 
 .sidebar {
-  background: #173f36;
-  background-image: radial-gradient(ellipse at 0% 0%, rgba(87, 163, 136, 0.2), transparent 65%);
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+}
+
+[data-role="patient"] { --role-accent: #117466; --role-soft: #e6f5ef; }
+[data-role="family"] { --role-accent: #6252a4; --role-soft: #f0ecfa; }
+[data-role="caregiver"] { --role-accent: #2c6a94; --role-soft: #eaf3fa; }
+
+.shell-nav { position: relative; transition: color 160ms, background 160ms; }
+.shell-nav.is-active { background: var(--role-soft); color: var(--role-accent); font-weight: 500; }
+.shell-nav.is-active::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 4px; background: var(--role-accent); }
+.sidebar-support { background: var(--role-soft); color: var(--role-accent); }
+.mobile-nav-item.is-active { background: var(--role-soft); color: var(--role-accent); font-weight: 500; }
+
+.role-switcher { display: flex; min-width: 0; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 4px 12px; color: var(--role-accent); }
+.role-switcher select { appearance: none; min-height: 36px; min-width: 0; max-width: 100%; flex: 1; background: transparent; font-size: .8125rem; font-weight: 500; padding: 4px 2px; }
+.role-options { display: grid; gap: 8px; }
+.role-option { display: flex; align-items: center; gap: 12px; min-height: 72px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; cursor: pointer; background: var(--surface); transition: border-color 140ms, background 140ms; }
+.role-option.is-selected { border-color: var(--role-accent); background: var(--role-soft); box-shadow: 0 0 0 1px var(--role-accent); }
+.role-option:focus-within { outline: 2px solid var(--role-accent); outline-offset: 3px; }
+.role-option-icon { display: flex; width: 40px; height: 40px; align-items: center; justify-content: center; flex-shrink: 0; border-radius: 12px; background: var(--role-soft); color: var(--role-accent); }
+.role-radio { order: 3; width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--role-accent); }
+.role-option-check { display: flex; width: 18px; height: 18px; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid var(--line); border-radius: 50%; color: white; }
+.role-option.is-selected .role-option-check { border-color: var(--role-accent); background: var(--role-accent); }
+.role-login { width: min(520px, calc(100% - 24px)); }
+.role-hero { border: 1px solid color-mix(in srgb, var(--role-accent) 16%, white); border-radius: 24px; padding: 28px; background: var(--role-soft); }
+.workspace-grid { display: grid; gap: 20px; }
+.metric-card { min-width: 0; border: 1px solid var(--line); border-radius: 20px; padding: 20px; background: white; }
+.patient-focus { background-image: radial-gradient(ellipse at top right, rgba(255,255,255,.7), transparent 75%); }
+@media (min-width: 1024px) { .workspace-grid { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); } }
+@media (max-width: 767px) {
+  .role-switcher-wrap .role-switcher { justify-content: space-between; background: var(--role-soft); border-color: transparent; }
+  .role-hero { padding: 20px; }
+  .role-option { gap: 8px; }
+  .role-option-icon { width: 34px; height: 34px; }
 }
 
 @layer components {
@@ -160,7 +193,7 @@ html.lite [role="button"] {
 }
 
 .eyebrow {
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 500;
   letter-spacing: 0.08em;
 }
@@ -190,7 +223,7 @@ html.lite [role="button"] {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--background);
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 .form-input:focus {

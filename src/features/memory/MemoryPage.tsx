@@ -19,7 +19,7 @@ export function MemoryPage() {
 
   return (
     <div className="mx-auto max-w-[720px]" data-testid="memory-page">
-      <h1 className="text-[30px] leading-tight">{t("memory.title")}</h1>
+      <h1 className="text-[1.875rem] leading-tight">{t("memory.title")}</h1>
       <p className="measure mt-2 text-ink-muted">{t("memory.sub")}</p>
       <GroupedList className="mt-8">
         {memories.map((m) => (
@@ -39,12 +39,12 @@ export function MemoryPage() {
       <Sheet open={!!item} onClose={() => setSelected(null)} side={desktop ? "right" : "bottom"} title={item ? L(item.value) : ""} testId="memory-drawer">
         {item ? (
           <div>
-            {item.pendingConfirm ? <p className="text-[13px] text-ink-soft">{t("source.pending")}</p> : <SourceLabel source={item.source} />}
+            {item.pendingConfirm ? <p className="text-[0.8125rem] text-ink-soft">{t("source.pending")}</p> : <SourceLabel source={item.source} />}
             <p className="mt-4">{L(item.detail)}</p>
             {forgetId === item.id ? (
               <div className="mt-6">
                 <p>{t("memory.stopAsk")}</p>
-                <p className="mt-2 text-[14px] text-ink-muted">{t("memory.stopBody")}</p>
+                <p className="mt-2 text-[0.875rem] text-ink-muted">{t("memory.stopBody")}</p>
                 <div className="mt-3 flex gap-2">
                   <Button variant="critical" onClick={() => excludeMemory(item.id)}>
                     {t("memory.stop")}

@@ -77,20 +77,20 @@ export function BriefPage() {
 
   return (
     <div className="mx-auto max-w-[720px]" data-testid="visit-brief">
-      <p className="text-[14px] text-ink-soft">
+      <p className="text-[0.875rem] text-ink-soft">
         {t("ask.person")} · {t("brief.title")} · {formatDateTime(clock, locale)}
       </p>
-      <h1 className="mt-2 text-[30px] leading-tight">{t("brief.title")}</h1>
+      <h1 className="mt-2 text-[1.875rem] leading-tight">{t("brief.title")}</h1>
 
       <section className="mt-8">
-        <h2 className="text-[15px] text-ink-soft">{t("brief.s1")}</h2>
-        <p className="mt-2 text-[17px]">{t("brief.issue")}</p>
+        <h2 className="text-[0.9375rem] text-ink-soft">{t("brief.s1")}</h2>
+        <p className="mt-2 text-[1.0625rem]">{t("brief.issue")}</p>
         <div className="mt-1">
           <SourceLabel source="organised" />
         </div>
       </section>
       <section className="mt-8">
-        <h2 className="text-[15px] text-ink-soft">{t("brief.s2")}</h2>
+        <h2 className="text-[0.9375rem] text-ink-soft">{t("brief.s2")}</h2>
         <p className="mt-2">
           {episodeSaved ? symptomLine(answers, locale) : locale === "en" ? "Morning note: a bit dizzy." : "上午8:35：今朝有少少頭暈。"}
         </p>
@@ -99,8 +99,8 @@ export function BriefPage() {
         </div>
       </section>
       <section className="mt-8">
-        <h2 className="text-[15px] text-ink-soft">{t("brief.s3")}</h2>
-        <ul className="mt-2 space-y-1 text-[16px]" data-testid="brief-bp">
+        <h2 className="text-[0.9375rem] text-ink-soft">{t("brief.s3")}</h2>
+        <ul className="mt-2 space-y-1 text-[1rem]" data-testid="brief-bp">
           {michelleBp().map((r) => (
             <li key={r.id}>
               {formatShortDate(r.occurredAt, locale)} {formatTime(r.occurredAt, locale)} · {r.systolic}/{r.diastolic} mmHg
@@ -115,7 +115,7 @@ export function BriefPage() {
         </div>
       </section>
       <section className="mt-8">
-        <h2 className="text-[15px] text-ink-soft">{t("brief.s4")}</h2>
+        <h2 className="text-[0.9375rem] text-ink-soft">{t("brief.s4")}</h2>
         <ul className="mt-2 space-y-1">
           {michelleMeds.map((m) => (
             <li key={m.id}>
@@ -132,7 +132,7 @@ export function BriefPage() {
         </div>
       </section>
       <section className="mt-8">
-        <h2 className="text-[15px] text-ink-soft">{t("brief.s5")}</h2>
+        <h2 className="text-[0.9375rem] text-ink-soft">{t("brief.s5")}</h2>
         <ul className="mt-2 space-y-1">
           {report.results.map((r) => (
             <li key={r.id}>
@@ -148,12 +148,12 @@ export function BriefPage() {
         </Link>
       </section>
       <section className="mt-8">
-        <h2 className="text-[15px] text-ink-soft">{t("brief.s6")}</h2>
+        <h2 className="text-[0.9375rem] text-ink-soft">{t("brief.s6")}</h2>
         <ul className="mt-2 space-y-2" data-testid="brief-questions">
           {questions.filter((q) => q.added).map((q) => (
             <li key={q.id} className="flex items-start justify-between gap-3">
               <span>{L(q.text)}</span>
-              <button type="button" className="text-[14px] text-ink-soft" onClick={() => toggleQuestion(q.id)}>
+              <button type="button" className="text-[0.875rem] text-ink-soft" onClick={() => toggleQuestion(q.id)}>
                 {t("brief.removeQ")}
               </button>
             </li>
@@ -186,7 +186,7 @@ export function BriefPage() {
       ) : null}
 
       <section className="mt-10 rounded-[20px] bg-surface px-5 py-5">
-        <h2 className="text-[18px]">{t("brief.script")}</h2>
+        <h2 className="text-[1.125rem]">{t("brief.script")}</h2>
         <p className="measure mt-3 leading-relaxed">{contactScript(locale, answers)}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => copy(contactScript(locale, answers))}>
@@ -222,11 +222,11 @@ export function BriefPage() {
           {t("brief.print")}
         </Link>
       </div>
-      <p className="mt-2 text-[13px] text-ink-soft">{t("brief.printNote")}</p>
+      <p className="mt-2 text-[0.8125rem] text-ink-soft">{t("brief.printNote")}</p>
 
       {episodeSaved && followup === "none" ? (
         <section className="mt-10" data-testid="followup-offer">
-          <h2 className="text-[20px]">{t("follow.offer")}</h2>
+          <h2 className="text-[1.25rem]">{t("follow.offer")}</h2>
           <p className="mt-2 text-ink-muted">{t("follow.offerBody")}</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button data-testid="follow-830" onClick={() => acceptFollowup("2026-09-17T08:30:00+08:00")}>
@@ -260,14 +260,14 @@ export function BriefPage() {
               {t("follow.ics")}
             </Button>
           </div>
-          <p className="mt-2 text-[13px] text-ink-soft">{t("follow.icsNote")}</p>
+          <p className="mt-2 text-[0.8125rem] text-ink-soft">{t("follow.icsNote")}</p>
         </section>
       ) : null}
 
-      <p className="mt-8 text-[14px] text-ink-soft">
+      <p className="mt-8 text-[0.875rem] text-ink-soft">
         {L(appt.title)} · {formatDateTime(appt.at, locale)}
       </p>
-      <p className="mt-6 text-[13px] text-ink-soft">{t("ask.boundary")}</p>
+      <p className="mt-6 text-[0.8125rem] text-ink-soft">{t("ask.boundary")}</p>
     </div>
   );
 }

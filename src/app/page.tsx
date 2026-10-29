@@ -1,5 +1,5 @@
-import { TodayPage } from "@/features/today/TodayPage";
+import { RoleHome } from "@/features/workspace/RoleHome";
 
 export default function Page() {
-  return <TodayPage />;
+  return <RoleHome />;
 }

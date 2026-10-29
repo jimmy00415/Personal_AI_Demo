@@ -17,7 +17,7 @@ export function PrintView() {
 
   return (
     <main className="mx-auto max-w-[720px] bg-white px-8 py-10 text-black" data-testid="print-view">
-      <pre className="font-sans text-[15px] leading-relaxed whitespace-pre-wrap">{text}</pre>
+      <pre className="font-sans text-[0.9375rem] leading-relaxed whitespace-pre-wrap">{text}</pre>
     </main>
   );
 }

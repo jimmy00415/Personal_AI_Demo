@@ -18,8 +18,8 @@ export function ReportPage() {
 
   return (
     <div className="mx-auto max-w-[720px]" data-testid="lab-page">
-      <h1 className="text-[30px] leading-tight">{t("report.title")}</h1>
-      <p className="mt-2 text-[15px] text-ink-muted">{t("report.sub")}</p>
+      <h1 className="text-[1.875rem] leading-tight">{t("report.title")}</h1>
+      <p className="mt-2 text-[0.9375rem] text-ink-muted">{t("report.sub")}</p>
 
       <div className="mt-8 divide-y divide-line rounded-[20px] bg-surface">
         {report.results.map((r) => (
@@ -32,31 +32,31 @@ export function ReportPage() {
           >
             <div className="flex items-baseline justify-between gap-3">
               <span>{L(r.name)}</span>
-              <span className="text-[20px]">
-                {r.value} <span className="text-[14px] text-ink-soft">{r.unit}</span>
+              <span className="text-[1.25rem]">
+                {r.value} <span className="text-[0.875rem] text-ink-soft">{r.unit}</span>
               </span>
             </div>
-            {expanded === r.id ? <p className="measure mt-3 text-[15px] text-ink-muted">{L(r.explain)}</p> : null}
+            {expanded === r.id ? <p className="measure mt-3 text-[0.9375rem] text-ink-muted">{L(r.explain)}</p> : null}
           </button>
         ))}
       </div>
-      <p className="mt-3 text-[13px] text-ink-soft" data-testid="lab-count">
+      <p className="mt-3 text-[0.8125rem] text-ink-soft" data-testid="lab-count">
         {report.results.length}
       </p>
 
-      <h2 className="mt-10 text-[20px]">{t("report.explain")}</h2>
+      <h2 className="mt-10 text-[1.25rem]">{t("report.explain")}</h2>
       <p className="measure mt-3 leading-relaxed">{L(report.results[0].explain)}</p>
 
       <div className="mt-6 flex flex-wrap gap-3">
-        <button type="button" className="text-[15px] text-brand" onClick={() => setSource((v) => !v)}>
+        <button type="button" className="text-[0.9375rem] text-brand" onClick={() => setSource((v) => !v)}>
           {t("report.source")}
         </button>
-        <button type="button" className="text-[15px] text-brand" onClick={() => setRefOpen((v) => !v)}>
+        <button type="button" className="text-[0.9375rem] text-brand" onClick={() => setRefOpen((v) => !v)}>
           {t("report.ref")}
         </button>
       </div>
       {source ? (
-        <pre className="mt-3 overflow-x-auto rounded-[14px] bg-surface-secondary p-4 text-[14px] whitespace-pre-wrap">
+        <pre className="mt-3 overflow-x-auto rounded-[14px] bg-surface-secondary p-4 text-[0.875rem] whitespace-pre-wrap">
           {`Blood test · 13 Sep 2026
 HbA1c 6.4 %
 LDL cholesterol 2.7 mmol/L

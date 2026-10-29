@@ -34,17 +34,17 @@ export function CarePage() {
     <div className="mx-auto max-w-[720px]" data-testid="plan-page">
       <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-soft text-brand"><CheckCheck className="h-6 w-6" aria-hidden /></div>
       <h1 className="title-1">{t("follow.title")}</h1>
-      <p className="mt-2 text-[15px] text-ink-muted">{locale === "en" ? "Keep your next steps and appointments in view." : "清楚掌握下一步，照顧好每個安排。"}</p>
+      <p className="mt-2 text-[0.9375rem] text-ink-muted">{locale === "en" ? "Keep your next steps and appointments in view." : "清楚掌握下一步，照顧好每個安排。"}</p>
 
       <section className="mt-6 rounded-[24px] border border-attention/20 bg-attention-soft p-5 sm:p-6">
         <div className="mb-4 flex items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/80 text-attention"><Phone className="h-5 w-5" aria-hidden /></span>
-          <h2 className="text-[18px] font-semibold">{locale === "en" ? "Stay in touch with your care team" : "與醫護保持聯絡"}</h2>
+          <h2 className="text-[1.125rem] font-semibold">{locale === "en" ? "Stay in touch with your care team" : "與醫護保持聯絡"}</h2>
         </div>
         <GroupedList>
           <ListRow
             title={t("follow.contact")}
-            value={<span className={`inline-flex rounded-full px-3 py-1 text-[12px] font-semibold ${contactStatus === "not_contacted" ? "bg-attention-soft text-attention" : "bg-brand-soft text-brand"}`}>{contactStatus === "not_contacted" ? t("follow.pending") : t("follow.done")}</span>}
+            value={<span className={`inline-flex rounded-full px-3 py-1 text-[0.75rem] font-semibold ${contactStatus === "not_contacted" ? "bg-attention-soft text-attention" : "bg-brand-soft text-brand"}`}>{contactStatus === "not_contacted" ? t("follow.pending") : t("follow.done")}</span>}
             onClick={() => router.push("/brief")}
           />
         </GroupedList>
@@ -53,7 +53,7 @@ export function CarePage() {
       <details open className="group mt-5 rounded-[24px] border border-sky/15 bg-sky-soft p-5 sm:p-6">
         <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/80 text-sky"><CalendarDays className="h-5 w-5" aria-hidden /></span>
-          <h2 className="flex-1 text-[18px] font-semibold">{locale === "en" ? "Your care plan" : "你的照顧安排"}</h2>
+          <h2 className="flex-1 text-[1.125rem] font-semibold">{locale === "en" ? "Your care plan" : "你的照顧安排"}</h2>
           <ChevronDown className="h-5 w-5 shrink-0 text-sky transition-transform group-open:rotate-180" aria-hidden />
         </summary>
         <GroupedList className="mt-4">
@@ -62,7 +62,7 @@ export function CarePage() {
               testId="follow-morning-row"
               title={t("follow.morning")}
               meta={followupAt ? formatDateTime(followupAt, locale) : undefined}
-              value={<span className="inline-flex rounded-full bg-sky-soft px-3 py-1 text-[12px] font-semibold text-sky">{stateLabel(morning?.state ?? "scheduled")}</span>}
+              value={<span className="inline-flex rounded-full bg-sky-soft px-3 py-1 text-[0.75rem] font-semibold text-sky">{stateLabel(morning?.state ?? "scheduled")}</span>}
             />
           ) : followup === "declined" ? (
             <ListRow title={t("follow.morning")} meta={t("follow.declined")} />
@@ -71,7 +71,7 @@ export function CarePage() {
             testId="follow-appt-row"
             title={t("follow.appt")}
             meta={formatDateTime(appt.at, locale)}
-            value={<span className="inline-flex rounded-full bg-brand-soft px-3 py-1 text-[12px] font-semibold text-brand">{bookingStatus === "booked" ? t("today.heroBooked") : t("follow.scheduled")}</span>}
+            value={<span className="inline-flex rounded-full bg-brand-soft px-3 py-1 text-[0.75rem] font-semibold text-brand">{bookingStatus === "booked" ? t("today.heroBooked") : t("follow.scheduled")}</span>}
             onClick={() => router.push(episodeSaved ? "/book" : "/brief")}
           />
           {accompany ? <ListRow title={locale === "en" ? accompany.title.en : accompany.title.zh} value={stateLabel(accompany.state)} /> : null}
@@ -81,14 +81,14 @@ export function CarePage() {
       <section className="panel mt-5">
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand"><ClipboardList className="h-5 w-5" aria-hidden /></span>
-          <h2 className="text-[18px] font-semibold">{t("brief.title")}</h2>
+          <h2 className="text-[1.125rem] font-semibold">{t("brief.title")}</h2>
         </div>
         <div className="mt-4 flex flex-wrap gap-3">
-          <Link href="/brief" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand px-4 py-2 text-[14px] font-medium text-white transition-colors hover:bg-brand-deep">
+          <Link href="/brief" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand px-4 py-2 text-[0.875rem] font-medium text-white transition-colors hover:bg-brand-deep">
             {t("today.viewBrief")}<ArrowUpRight className="h-4 w-4" aria-hidden />
           </Link>
           {episodeSaved ? (
-            <Link href="/book" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-soft px-4 py-2 text-[14px] font-medium text-brand transition-colors hover:bg-brand/15">
+            <Link href="/book" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-soft px-4 py-2 text-[0.875rem] font-medium text-brand transition-colors hover:bg-brand/15">
               {bookingStatus === "booked" ? t("today.viewBook") : t("today.book")}<ArrowUpRight className="h-4 w-4" aria-hidden />
             </Link>
           ) : null}

@@ -1,26 +1,34 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Eye, EyeOff, HeartPulse, LockKeyhole, Mail, ShieldCheck, X } from "lucide-react";
+import { Eye, EyeOff, HeartPulse, LockKeyhole, Mail, ShieldCheck, X, Users, ClipboardCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useDemoAccount } from "@/lib/demo-account";
 import { useI18n } from "@/lib/use-i18n";
 import { Button } from "./system";
+import { APP_ROLES, ROLE_META, type AppRole } from "@/lib/roles";
 
 export function LoginDialog() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const router = useRouter();
+  const currentRole = useDemoAccount((s) => s.role);
   const close = useDemoAccount((s) => s.closeLogin);
   const signIn = useDemoAccount((s) => s.signIn);
   const ref = useRef<HTMLDialogElement>(null);
-  const emailRef = useRef<HTMLInputElement>(null);
+  const roleRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [visible, setVisible] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<AppRole>(currentRole);
+  const lang = locale === "en" ? "en" : "zh";
+  const icons = { patient: HeartPulse, family: Users, caregiver: ClipboardCheck };
 
   useEffect(() => {
     const dialog = ref.current;
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialog?.showModal();
-    emailRef.current?.focus();
+    roleRef.current?.focus({ preventScroll: true });
+    if (dialog) dialog.scrollTop = 0;
     return () => {
       dialog?.close();
       trigger?.focus();
@@ -32,11 +40,12 @@ export function LoginDialog() {
       ref={ref}
       aria-labelledby="login-title"
       aria-describedby="login-description"
-      className="login-dialog"
+      className="login-dialog role-login"
+      data-role={selectedRole}
       onCancel={(event) => { event.preventDefault(); close(); }}
       onKeyDown={(event) => {
         if (event.key !== "Tab") return;
-        const controls = event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled)");
+        const controls = event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled):not([type="radio"]), input[type="radio"]:checked');
         const first = controls[0];
         const last = controls[controls.length - 1];
         if (event.shiftKey && document.activeElement === first) {
@@ -57,36 +66,53 @@ export function LoginDialog() {
         <button type="button" aria-label={t("common.close")} onClick={close} className="absolute right-3 top-3 rounded-full p-2 text-ink-muted hover:bg-surface-secondary"><X className="h-5 w-5" /></button>
         <span className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-soft text-brand"><HeartPulse className="h-7 w-7" /></span>
         <p className="eyebrow text-brand">CAREMATE · {t("account.preview")}</p>
-        <h2 id="login-title" className="mt-2 text-[28px] font-medium">{t("account.loginTitle")}</h2>
-        <p id="login-description" className="mt-2 text-[14px] leading-relaxed text-ink-muted">{t("account.loginBody")}</p>
+        <h2 id="login-title" className="mt-2 text-[1.75rem] font-medium">{t("account.loginTitle")}</h2>
+        <p id="login-description" className="mt-2 text-[0.875rem] leading-relaxed text-ink-muted">{t("account.loginBody")}</p>
 
         <form className="mt-6 space-y-4" onSubmit={(event) => {
           event.preventDefault();
           setPassword("");
-          signIn(email);
+          signIn(email, selectedRole);
+          if (selectedRole !== "patient" || currentRole !== selectedRole) router.push("/");
         }}>
+          <fieldset>
+            <legend className="mb-3 text-sm font-medium">{locale === "en" ? "How will you use CareMate?" : "選擇你的角色"}</legend>
+            <div className="role-options">
+              {APP_ROLES.map((role) => {
+                const Icon = icons[role];
+                const meta = ROLE_META[role];
+                return (
+                  <label key={role} className={`role-option ${selectedRole === role ? "is-selected" : ""}`} data-role={role}>
+                    <input ref={selectedRole === role ? roleRef : undefined} type="radio" name="care-role" value={role} checked={selectedRole === role} onChange={() => setSelectedRole(role)} className="role-radio" />
+                    <span className="role-option-icon"><Icon className="h-5 w-5" aria-hidden /></span>
+                    <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{meta.label[lang]}</span><span className="mt-1 block text-xs leading-relaxed text-ink-muted">{meta.description[lang]}</span></span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
           <div>
-            <label htmlFor="login-email" className="mb-2 block text-[14px] font-medium">{t("account.email")}</label>
+            <label htmlFor="login-email" className="mb-2 block text-[0.875rem] font-medium">{t("account.email")}</label>
             <div className="relative">
               <Mail aria-hidden="true" className="pointer-events-none absolute left-3.5 top-3.5 h-5 w-5 text-ink-soft" />
-              <input ref={emailRef} id="login-email" type="email" required maxLength={254} autoComplete="off" placeholder="demo@caremate.hk" value={email} onChange={(event) => setEmail(event.target.value)} className="form-input pl-11" />
+              <input id="login-email" type="email" required maxLength={254} autoComplete="off" placeholder="demo@caremate.hk" value={email} onChange={(event) => setEmail(event.target.value)} className="form-input pl-11" />
             </div>
           </div>
           <div>
-            <label htmlFor="login-password" className="mb-2 block text-[14px] font-medium">{t("account.password")}</label>
+            <label htmlFor="login-password" className="mb-2 block text-[0.875rem] font-medium">{t("account.password")}</label>
             <div className="relative">
               <LockKeyhole aria-hidden="true" className="pointer-events-none absolute left-3.5 top-3.5 h-5 w-5 text-ink-soft" />
               <input id="login-password" type={visible ? "text" : "password"} required minLength={6} maxLength={128} autoComplete="off" aria-describedby="password-hint" placeholder={t("account.passwordHint")} value={password} onChange={(event) => setPassword(event.target.value)} className="form-input pl-11 pr-12" />
               <button type="button" aria-label={t(visible ? "account.hidePassword" : "account.showPassword")} aria-pressed={visible} onClick={() => setVisible((value) => !value)} className="absolute right-1 top-1 rounded-lg p-2.5 text-ink-muted">{visible ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}</button>
             </div>
-            <p id="password-hint" className="mt-2 text-[12px] text-ink-muted">{t("account.passwordHint")}</p>
+            <p id="password-hint" className="mt-2 text-[0.75rem] text-ink-muted">{t("account.passwordHint")}</p>
           </div>
           <Button type="submit" data-testid="login-submit" className="w-full">{t("account.submit")}</Button>
           <Button variant="secondary" className="w-full" onClick={() => { setEmail("demo@caremate.hk"); setPassword("demo1234"); }}>{t("account.fillDemo")}</Button>
         </form>
 
-        <div className="mt-5 flex gap-2 rounded-xl bg-sky-soft p-3 text-[12px] leading-relaxed text-sky"><ShieldCheck aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" /><span>{t("account.demoNotice")}</span></div>
-        <button type="button" onClick={close} className="mt-4 min-h-11 w-full text-[14px] text-ink-muted hover:text-brand">{t("account.guestContinue")}</button>
+        <div className="mt-5 flex gap-2 rounded-xl bg-sky-soft p-3 text-[0.75rem] leading-relaxed text-sky"><ShieldCheck aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" /><span>{t("account.demoNotice")}</span></div>
+        <button type="button" onClick={close} className="mt-4 min-h-11 w-full text-[0.875rem] text-ink-muted hover:text-brand">{t("account.guestContinue")}</button>
       </div>
     </dialog>
   );

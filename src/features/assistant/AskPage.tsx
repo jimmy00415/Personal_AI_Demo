@@ -152,9 +152,9 @@ export function AskPage() {
   return (
     <div data-testid="chat-page" className="mx-auto max-w-2xl">
       <header className="mb-6">
-        <h1 className="text-[28px] leading-tight">{t("ask.title")}</h1>
-        <p className="mt-1 text-[15px] text-ink-muted">{t("ask.person")}</p>
-        <p className="mt-2 text-[14px] text-ink-soft">{t("ask.context")}</p>
+        <h1 className="text-[1.75rem] leading-tight">{t("ask.title")}</h1>
+        <p className="mt-1 text-[0.9375rem] text-ink-muted">{t("ask.person")}</p>
+        <p className="mt-2 text-[0.875rem] text-ink-soft">{t("ask.context")}</p>
       </header>
 
       <div className="space-y-5">
@@ -167,7 +167,7 @@ export function AskPage() {
                   msg.role === "user"
                     ? "max-w-[84%] rounded-[18px] bg-brand px-4 py-3 text-white"
                     : msg.note
-                      ? "measure text-[14px] text-ink-soft"
+                      ? "measure text-[0.875rem] text-ink-soft"
                       : "measure leading-relaxed"
                 }
               >
@@ -179,11 +179,11 @@ export function AskPage() {
 
         {step === "urgent" ? (
           <div>
-            <p className="text-[17px]">{t("ask.urgentQ")}</p>
-            <button type="button" className="mt-2 text-[13px] text-ink-soft" onClick={() => setWhy((v) => !v)}>
+            <p className="text-[1.0625rem]">{t("ask.urgentQ")}</p>
+            <button type="button" className="mt-2 text-[0.8125rem] text-ink-soft" onClick={() => setWhy((v) => !v)}>
               {t("ask.whyAsk")}
             </button>
-            {why ? <p className="mt-1 text-[14px] text-ink-muted">{t("ask.whyUrgent")}</p> : null}
+            {why ? <p className="mt-1 text-[0.875rem] text-ink-muted">{t("ask.whyUrgent")}</p> : null}
           </div>
         ) : null}
 
@@ -200,7 +200,7 @@ export function AskPage() {
         {step === "worsening" ? (
           <div className="space-y-3" data-testid="worsening-branch">
             <p className="measure">{t("ask.worseAdvice")}</p>
-            <p className="text-[14px] text-ink-muted">{t("ask.medQ")}</p>
+            <p className="text-[0.875rem] text-ink-muted">{t("ask.medQ")}</p>
             <div className="grid gap-2">
               {medOpts.map((opt) => (
                 <button key={opt.id} type="button" data-testid={`quick-reply-${opt.id}`} onClick={() => answer(opt.id)} className="min-h-12 rounded-[12px] bg-surface-secondary px-3 text-left">
@@ -219,7 +219,7 @@ export function AskPage() {
                 type="button"
                 data-testid={`quick-reply-${opt.id}`}
                 onClick={() => answer(opt.id)}
-                className="min-h-12 rounded-[12px] bg-surface-secondary px-3 text-left text-[16px] hover:bg-line"
+                className="min-h-12 rounded-[12px] bg-surface-secondary px-3 text-left text-[1rem] hover:bg-line"
               >
                 {t(opt.key)}
               </button>
@@ -232,7 +232,7 @@ export function AskPage() {
             {answers.medGap === "taken-unlogged" ? (
               <div className="mb-5 rounded-[14px] bg-surface-secondary px-4 py-3" data-testid="med-receipt">
                 <div>{t("ask.receiptMed")}</div>
-                <div className="mt-1 text-[13px] text-ink-soft">
+                <div className="mt-1 text-[0.8125rem] text-ink-soft">
                   {t("ask.receiptBy")} · {formatDate(addMinutes(clock, 3), locale)} {formatTime(addMinutes(clock, 3), locale)}
                 </div>
               </div>
@@ -242,8 +242,8 @@ export function AskPage() {
             {answers.medGap === "forgot" ? <p className="mb-4">{t("ask.medForgot")}</p> : null}
             <p>{answers.change === "worse" ? t("ask.worseLead") : t("ask.summaryLead")}</p>
             <p className="mt-3">{answers.change === "worse" ? t("ask.worseAdvice") : t("ask.summaryAdvice")}</p>
-            <h2 className="mt-6 text-[18px]">{t("ask.summaryTitle")}</h2>
-            <dl className="mt-3 space-y-3 text-[15px]">
+            <h2 className="mt-6 text-[1.125rem]">{t("ask.summaryTitle")}</h2>
+            <dl className="mt-3 space-y-3 text-[0.9375rem]">
               <Row k={t("ask.f.dizzy")} v={symptomLine(answers, locale)} />
               <Row k={t("ask.f.bp")} v="151/94 mmHg · 08:30" />
               <Row k={t("ask.f.avg")} v={`${avg.systolic}/${avg.diastolic} mmHg`} />
@@ -251,7 +251,7 @@ export function AskPage() {
               <Row k={t("ask.f.med")} v={answers.medGap === "taken-unlogged" ? t("ask.f.medV") : answers.medGap === "not-taken" ? t("ask.medNot") : t("ask.medForgot")} />
               <Row k={t("ask.f.next")} v={t("ask.f.nextV")} />
             </dl>
-            <p className="mt-3 text-[13px] text-ink-soft">{t("ask.notClearance")}</p>
+            <p className="mt-3 text-[0.8125rem] text-ink-soft">{t("ask.notClearance")}</p>
             {!episodeSaved ? (
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button data-testid="add-to-journey" onClick={saveSummary}>
@@ -301,10 +301,10 @@ export function AskPage() {
           {t("ask.retry")}
         </Button>
       ) : null}
-      <p className="mt-3 text-[13px] text-ink-soft" data-testid="ask-llm-status">
+      <p className="mt-3 text-[0.8125rem] text-ink-soft" data-testid="ask-llm-status">
         {llm === "on" ? t("ask.llmOn") : canUseLocalLlm() && llm === "off" ? t("ask.llmOff") : t("ask.boundary")}
       </p>
-      {llm === "on" ? <p className="mt-1 text-[13px] text-ink-soft">{t("ask.boundary")}</p> : null}
+      {llm === "on" ? <p className="mt-1 text-[0.8125rem] text-ink-soft">{t("ask.boundary")}</p> : null}
     </div>
   );
 }

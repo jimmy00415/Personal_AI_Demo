@@ -44,8 +44,8 @@ export function BookPage() {
   if (viewing === "lai-wah") {
     return (
       <div className="mx-auto max-w-[720px]" data-testid="book-page">
-        <h1 className="text-[30px] leading-tight">{t("book.title")}</h1>
-        <p className="measure mt-4 text-[17px]">{t("book.mother")}</p>
+        <h1 className="text-[1.875rem] leading-tight">{t("book.title")}</h1>
+        <p className="measure mt-4 text-[1.0625rem]">{t("book.mother")}</p>
         <Link href="/family" className="mt-6 inline-flex min-h-12 items-center text-brand">
           {t("family.switch")}
         </Link>
@@ -56,8 +56,8 @@ export function BookPage() {
   if (!episodeSaved) {
     return (
       <div className="mx-auto max-w-[720px]" data-testid="book-page">
-        <h1 className="text-[30px] leading-tight">{t("book.title")}</h1>
-        <p className="measure mt-4 text-[17px]">{t("book.needSummary")}</p>
+        <h1 className="text-[1.875rem] leading-tight">{t("book.title")}</h1>
+        <p className="measure mt-4 text-[1.0625rem]">{t("book.needSummary")}</p>
         <Link href="/ask" className="mt-6 inline-flex min-h-12 items-center text-brand">
           {t("today.understand")}
         </Link>
@@ -88,11 +88,11 @@ export function BookPage() {
 
   return (
     <div className="mx-auto max-w-[720px]" data-testid="book-page">
-      <p className="text-[14px] text-ink-soft">{t("book.sub")}</p>
-      <h1 className="mt-2 text-[30px] leading-tight">{t("book.title")}</h1>
-      <p className="measure mt-3 text-[17px] leading-relaxed text-ink-muted">{t("book.lead")}</p>
+      <p className="text-[0.875rem] text-ink-soft">{t("book.sub")}</p>
+      <h1 className="mt-2 text-[1.875rem] leading-tight">{t("book.title")}</h1>
+      <p className="measure mt-3 text-[1.0625rem] leading-relaxed text-ink-muted">{t("book.lead")}</p>
 
-      <ol className="mt-6 flex flex-wrap gap-2 text-[13px]">
+      <ol className="mt-6 flex flex-wrap gap-2 text-[0.8125rem]">
         {[t("book.step1"), t("book.step2"), t("book.step3")].map((label, i) => {
           const active = phase === "check" ? i === 0 : phase === "search" ? i <= 1 : true;
           return (
@@ -104,9 +104,9 @@ export function BookPage() {
       </ol>
 
       <section className="mt-8" data-testid="book-packet">
-        <h2 className="text-[15px] text-ink-soft">{t("book.packet")}</h2>
-        <p className="mt-2 text-[18px]">{t("book.identity")}</p>
-        <dl className="mt-4 space-y-3 text-[15px]">
+        <h2 className="text-[0.9375rem] text-ink-soft">{t("book.packet")}</h2>
+        <p className="mt-2 text-[1.125rem]">{t("book.identity")}</p>
+        <dl className="mt-4 space-y-3 text-[0.9375rem]">
           <Row k={t("ask.f.dizzy")} v={answers.onset ? symptomLine(answers, locale) : locale === "en" ? "Morning note: a bit dizzy." : "今朝有少少頭暈。"} />
           <Row k={t("ask.f.bp")} v={`151/94 mmHg · ${formatTime(michelleBp().at(-1)!.occurredAt, locale)}`} />
           <Row k={t("ask.f.avg")} v={`${avg.systolic}/${avg.diastolic} mmHg`} />
@@ -126,8 +126,8 @@ export function BookPage() {
       </section>
 
       <section className="mt-10">
-        <h2 className="text-[15px] text-ink-soft">{t("book.slots")}</h2>
-        <p className="mt-1 text-[13px] text-ink-soft">
+        <h2 className="text-[0.9375rem] text-ink-soft">{t("book.slots")}</h2>
+        <p className="mt-1 text-[0.8125rem] text-ink-soft">
           {t("book.clinicCal")} · {formatShortDate(clock, locale)} {formatTime(clock, locale)}
         </p>
         <div className="mt-3 grid gap-2" data-testid="book-slots">
@@ -143,11 +143,11 @@ export function BookPage() {
                 className={`rounded-[16px] px-4 py-3.5 text-left ${selected ? "bg-brand-soft" : "bg-surface-secondary"}`}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[17px]">{formatDateTime(item.at, locale)}</span>
-                  {item.recommended ? <span className="text-[12px] text-brand">{t("book.recommended")}</span> : null}
-                  {item.current ? <span className="text-[12px] text-ink-soft">{t("book.current")}</span> : null}
+                  <span className="text-[1.0625rem]">{formatDateTime(item.at, locale)}</span>
+                  {item.recommended ? <span className="text-[0.75rem] text-brand">{t("book.recommended")}</span> : null}
+                  {item.current ? <span className="text-[0.75rem] text-ink-soft">{t("book.current")}</span> : null}
                 </div>
-                <p className="mt-1 text-[14px] text-ink-muted">{L(item.clinic)} · {L(item.reason)}</p>
+                <p className="mt-1 text-[0.875rem] text-ink-muted">{L(item.clinic)} · {L(item.reason)}</p>
               </button>
             );
           })}
@@ -155,14 +155,14 @@ export function BookPage() {
       </section>
 
       <section className="mt-8 rounded-[20px] bg-surface px-5 py-5">
-        <h2 className="text-[18px]">{t("book.reason")}</h2>
+        <h2 className="text-[1.125rem]">{t("book.reason")}</h2>
           <p className="measure mt-3 leading-relaxed">{contactScript(locale, answers)}</p>
       </section>
 
       {booked ? (
         <section className="mt-8" data-testid="book-receipt">
-          <h2 className="text-[20px]">{t("book.receipt")}</h2>
-          <p className="mt-2 text-[17px]">{formatDateTime(appt.at, locale)}</p>
+          <h2 className="text-[1.25rem]">{t("book.receipt")}</h2>
+          <p className="mt-2 text-[1.0625rem]">{formatDateTime(appt.at, locale)}</p>
           <p className="measure mt-2 text-ink-muted">{t("book.receiptBody")}</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button variant="secondary" onClick={downloadIcs}>
@@ -180,10 +180,10 @@ export function BookPage() {
           </Button>
         </div>
       ) : (
-        <p className="mt-8 text-[15px] text-ink-muted">{phase === "search" ? t("book.step2") : t("book.step1")}</p>
+        <p className="mt-8 text-[0.9375rem] text-ink-muted">{phase === "search" ? t("book.step2") : t("book.step1")}</p>
       )}
 
-      <p className="mt-8 text-[13px] text-ink-soft">{t("book.note")}</p>
+      <p className="mt-8 text-[0.8125rem] text-ink-soft">{t("book.note")}</p>
     </div>
   );
 }

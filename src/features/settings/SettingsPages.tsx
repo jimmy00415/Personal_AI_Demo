@@ -8,6 +8,9 @@ import { useI18n } from "@/lib/use-i18n";
 import type { SceneId } from "@/lib/types";
 import { Button } from "@/components/system";
 import { useDemoAccount } from "@/lib/demo-account";
+import { ROLE_META, roleLabel } from "@/lib/roles";
+import { RoleSwitcher } from "@/components/RoleSwitcher";
+import { useCareWorkspace } from "@/lib/care-workspace";
 
 export function SettingsPage() {
   const { t, locale, liteMode } = useI18n();
@@ -18,18 +21,25 @@ export function SettingsPage() {
   const user = useDemoAccount((s) => s.user);
   const openLogin = useDemoAccount((s) => s.openLogin);
   const signOut = useDemoAccount((s) => s.signOut);
+  const role = useDemoAccount((s) => s.role);
+  const resetWorkspace = useCareWorkspace((s) => s.reset);
   return (
     <div className="mx-auto max-w-[640px]" data-testid="settings-page">
       <h1 className="title-1">{t("settings.title")}</h1>
       <section className="panel mt-7 border-brand/20 bg-brand-soft/40">
-        <div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-soft text-brand"><UserRound className="h-5 w-5" /></span><h2 className="text-[18px] font-medium">{t("account.title")}</h2></div>
-        <p className="mt-4 break-all text-[20px] font-medium">{user?.name ?? t("account.guest")}</p>
-        {user ? <p className="mt-1 break-all text-[14px] text-ink-muted">{user.email}</p> : null}
-        <p className="mt-2 text-[14px] text-ink-muted">{t(user ? "account.signedIn" : "account.guestBody")}</p>
+        <div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-soft text-brand"><UserRound className="h-5 w-5" /></span><h2 className="text-[1.125rem] font-medium">{t("account.title")}</h2></div>
+        <p className="mt-4 break-all text-[1.25rem] font-medium">{user?.name ?? t("account.guest")}</p>
+        {user ? <p className="mt-1 break-all text-[0.875rem] text-ink-muted">{user.email}</p> : null}
+        <p className="mt-2 text-[0.875rem] text-ink-muted">{t(user ? "account.signedIn" : "account.guestBody")}</p>
+        <div className="mt-5 border-t border-line pt-4">
+          <p className="mb-2 text-sm font-medium">{locale === "en" ? "Your role" : "目前角色"} · {roleLabel(role, locale)}</p>
+          <p className="mb-3 text-sm text-ink-muted">{ROLE_META[role].description[locale === "en" ? "en" : "zh"]}</p>
+          <RoleSwitcher testId="settings-role-switcher" />
+        </div>
         {user ? <Button data-testid="account-logout" variant="secondary" className="mt-4" onClick={signOut}><LogOut className="h-4 w-4" />{t("account.logout")}</Button> : <Button data-testid="settings-login" className="mt-4" onClick={openLogin}><LogIn className="h-4 w-4" />{t("account.login")}</Button>}
       </section>
       <section className="panel mt-4">
-      <h2 className="flex items-center gap-2 text-[16px] font-medium"><Languages className="h-5 w-5 text-sky" />{t("nav.language")}</h2>
+      <h2 className="flex items-center gap-2 text-[1rem] font-medium"><Languages className="h-5 w-5 text-sky" />{t("nav.language")}</h2>
       <div className="mt-4 flex flex-wrap gap-2">
         <Button variant={locale === "zh-HK" ? "primary" : "secondary"} onClick={() => setLocale("zh-HK")}>
           {t("lang.zh")}
@@ -40,14 +50,14 @@ export function SettingsPage() {
       </div>
       </section>
       <section className="panel mt-4">
-      <h2 className="flex items-center gap-2 text-[16px] font-medium"><Monitor className="h-5 w-5 text-violet" />{t("nav.display")}</h2>
-      <Button data-testid="lite-toggle-settings" className="mt-4" variant={liteMode ? "primary" : "secondary"} onClick={() => setLiteMode(!liteMode)}>
+      <h2 className="flex items-center gap-2 text-[1rem] font-medium"><Monitor className="h-5 w-5 text-violet" />{t("nav.display")}</h2>
+      <Button data-testid="lite-toggle-settings" aria-pressed={liteMode} className="mt-4" variant={liteMode ? "primary" : "secondary"} onClick={() => setLiteMode(!liteMode)}>
         {liteMode ? t("lite.on") : t("lite.off")}
       </Button>
       </section>
       <section className="panel mt-4">
-      <h2 className="flex items-center gap-2 text-[16px] font-medium"><Database className="h-5 w-5 text-attention" />{t("settings.data")}</h2>
-      <p className="measure mt-2 text-[15px] text-ink-muted">{t("settings.dataBody")}</p>
+      <h2 className="flex items-center gap-2 text-[1rem] font-medium"><Database className="h-5 w-5 text-attention" />{t("settings.data")}</h2>
+      <p className="measure mt-2 text-[0.9375rem] text-ink-muted">{t("settings.dataBody")}</p>
       {confirmClear ? (
         <div className="mt-3 flex flex-wrap gap-2">
           <Button
@@ -56,6 +66,7 @@ export function SettingsPage() {
             onClick={() => {
               setConfirmClear(false);
               signOut();
+              resetWorkspace();
               clearDeviceData();
             }}
           >
@@ -84,8 +95,8 @@ export function AboutPage() {
   const { t } = useI18n();
   return (
     <div className="mx-auto max-w-[680px]" data-testid="about-page">
-      <h1 className="text-[30px]">{t("about.title")}</h1>
-      <p className="measure mt-4 text-[17px] leading-relaxed">{t("about.body")}</p>
+      <h1 className="text-[1.875rem]">{t("about.title")}</h1>
+      <p className="measure mt-4 text-[1.0625rem] leading-relaxed">{t("about.body")}</p>
       <p className="measure mt-4 text-ink-muted">{t("about.limit")}</p>
     </div>
   );
@@ -125,7 +136,7 @@ export function DevPage() {
   ];
   return (
     <div className="mx-auto max-w-[640px]" data-testid="dev-page">
-      <h1 className="text-[30px]">{t("dev.title")}</h1>
+      <h1 className="text-[1.875rem]">{t("dev.title")}</h1>
       <div className="mt-6 grid gap-2">
         <Button data-testid="demo-reset" onClick={resetWorld}>
           {t("dev.reset")}

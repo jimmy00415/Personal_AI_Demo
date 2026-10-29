@@ -19,8 +19,8 @@ test("login is a keyboard-accessible frontend demo and never stores or sends the
   const dialog = page.getByRole("dialog", { name: "登入康伴" });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("前端展示");
-  await expect(dialog.getByLabel("電郵地址")).toBeFocused();
-  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByRole("radio", { name: /長期病患者/ })).toBeFocused();
+  await dialog.getByRole("button", { name: "關閉", exact: true }).focus();
   await page.keyboard.press("Shift+Tab");
   await expect(dialog.getByRole("button", { name: "以訪客繼續" })).toBeFocused();
   await dialog.getByLabel("電郵地址").fill("alex@example.com");

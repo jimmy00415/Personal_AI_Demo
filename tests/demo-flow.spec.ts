@@ -109,7 +109,8 @@ test("family does not expose medication and can add accompany task", async ({ pa
   await expect(page.getByTestId("mother-profile")).not.toContainText("Losartan");
   await page.getByTestId("mother-book").click();
   await expect(page.getByTestId("book-page")).toContainText("不能代媽媽");
-  await page.getByTestId("nav-family").click();
+  await page.getByTestId("nav-sharing").click();
+  await page.getByTestId("family-inbound-link").click();
   if (await page.getByTestId("family-lai-wah").isVisible()) {
     await page.getByTestId("family-lai-wah").click();
   }
